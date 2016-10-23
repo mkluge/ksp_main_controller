@@ -56,6 +56,7 @@ PCF8574 kc5(PCF_BASE_ADDRESS + 4);
 PCF8574 lc1(PCF_BASE_ADDRESS + 5);
 PCF8574 lc2(PCF_BASE_ADDRESS + 6);
 
+// main buttons
 LightButton lb1("stage", &kc1, 4, &lc1, 0);
 LightButton lb2("rcs", &kc1, 5, &lc1, 1);
 LightButton lb3("sas", &kc1, 6, &lc2, 0);
@@ -65,10 +66,27 @@ LightButton lb6("switch_left", &kc5, 7);
 LightButton lb7("lights", &kc2, 7, NULL, 0);
 LightButton lb8("brakes", &kc1, 0, NULL, 0);
 
+// Led panel 0-9 : 2(3) 2(4-7) 3(4) 3(0-3)
+// licht 6(0-7) und 7(0-7)
+LightButton lb9( "ag1", &kc2, 3, &lc2, 0);
+LightButton lb10("ag2", &kc2, 4, &lc2, 1);
+LightButton lb11("ag3", &kc2, 5, &lc2, 2);
+LightButton lb12("ag4", &kc2, 6, &lc2, 3);
+LightButton lb13("ag5", &kc2, 7, &lc2, 4);
+LightButton lb14("ag6", &kc3, 4, &lc2, 5);
+LightButton lb15("ag7", &kc3, 0, &lc2, 6);
+LightButton lb16("ag8", &kc3, 1, &lc2, 7);
+LightButton lb17("ag9", &kc3, 2, &lc1, 6);
+LightButton lb18("ag10", &kc3, 3, &lc1, 7);
+
+// all solar in out
+LightButton lb19("solar1", &kc1, 0, NULL, 0);
+LightButton lb20("solar0", &kc1, 0, NULL, 0);
+
 #define NUM_ANALOG_BUTTONS 7
 #define NUM_KEY_CHIPS 5
 #define NUM_LED_CHIPS 2
-#define NUM_LIGHT_BUTTONS 8
+#define NUM_LIGHT_BUTTONS 20
 
 AnalogInput *analog_inputs[NUM_ANALOG_BUTTONS] = {
 		&ai1, &ai2, &ai3, &ai4, &ai5, &ai6, &ai7
@@ -80,7 +98,9 @@ PCF8574 *led_chips[NUM_LED_CHIPS] = {
 		&lc1, &lc2
 };
 LightButton *buttons[NUM_LIGHT_BUTTONS] = {
-		&lb1, &lb2, &lb3, &lb4, &lb5, &lb6, &lb7, &lb8
+	&lb1, &lb2, &lb3, &lb4, &lb5, &lb6, &lb7, &lb8, &lb9,
+	&lb10, &lb11, &lb12, &lb13, &lb14, &lb15, &lb16, &lb17, &lb18, &lb19,
+	&lb20
 };
 
 // some button indizes for easier handling
