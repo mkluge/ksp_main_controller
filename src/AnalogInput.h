@@ -22,7 +22,7 @@ public:
 	virtual ~AnalogInput();
 
 	void calibrate();
-	void readInto( JsonObject& root );
+	void readInto( JsonObject& root, bool only_on_diff );
 
 private:
 	int readValue();

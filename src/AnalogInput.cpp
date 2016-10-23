@@ -29,10 +29,10 @@ void AnalogInput::calibrate() {
 	last_value = reference_value;
 }
 
-void AnalogInput::readInto(JsonObject& root) {
+void AnalogInput::readInto(JsonObject& root, bool only_on_diff) {
 	int val = readValue();
-	// if it changed for at least 2%
-	if ( abs(val-last_value)>20 )
+
+	if ( only_on_diff==false || abs(val-last_value)>20 )
 	{
 		if( get_diff )
 		{

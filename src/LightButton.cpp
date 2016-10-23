@@ -30,7 +30,10 @@ LightButton::~LightButton() {
 }
 
 void LightButton::setLight(bool enable) {
-	light_chip->setPin(light_pin, enable);
+	if( light_chip!=NULL)
+	{
+		light_chip->setPin(light_pin, enable);
+	}
 }
 
 bool LightButton::readState() const {

@@ -83,8 +83,8 @@ LightButton *action_group_buttons[10] = {
 };
 
 // all solar in out
-LightButton lb19("solar1", &kc1, 0, NULL, 0);
-LightButton lb20("solar0", &kc1, 0, NULL, 0);
+LightButton lb19("solar1", &kc4, 4, NULL, 0);
+LightButton lb20("solar0", &kc4, 3, NULL, 0);
 
 #define NUM_ANALOG_BUTTONS 7
 #define NUM_KEY_CHIPS 5
@@ -265,8 +265,7 @@ void reset_serial_buffer() {
 bool check_message() {
 	// always read one full message
 	if (Serial.available()) {
-		while (Serial.available())
-		{
+		while(1) {
 			char inByte = Serial.read();
 			if (inByte == '\n') {
 				return true;
@@ -412,7 +411,7 @@ void loop()
 	LOOP_OVER(NUM_ANALOG_BUTTONS)
 	{
 		AnalogInput *i = analog_inputs[index];
-		i->readInto(root);
+		i->readInto(root,false);
 	}
 	testAllButtons(root);
 	// there are two special buttons :)
