@@ -266,12 +266,16 @@ bool check_message() {
 	// always read one full message
 	if (Serial.available()) {
 		while(1) {
-			char inByte = Serial.read();
+			int inByte = Serial.read();
+			if( inByte == -1 )
+			{
+				continue;
+			}
 			if (inByte == '\n') {
 				return true;
 			}
 			if (read_buffer_offset < (READ_BUFFER_SIZE - 1)) {
-				read_buffer[read_buffer_offset] = inByte;
+				read_buffer[read_buffer_offset] = (char) inByte;
 				read_buffer_offset++;
 			} else {
 				dieError(3);
