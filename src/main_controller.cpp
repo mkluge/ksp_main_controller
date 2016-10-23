@@ -78,6 +78,9 @@ LightButton lb15("ag7", &kc3, 0, &lc2, 6);
 LightButton lb16("ag8", &kc3, 1, &lc2, 7);
 LightButton lb17("ag9", &kc3, 2, &lc1, 6);
 LightButton lb18("ag10", &kc3, 3, &lc1, 7);
+LightButton *action_group_buttons[10] = {
+	&lb9, &lb10, &lb11, &lb12, &lb13, &lb14, &lb15, &lb16, &lb17, &lb18,
+};
 
 // all solar in out
 LightButton lb19("solar1", &kc1, 0, NULL, 0);
@@ -331,6 +334,26 @@ void sendToSlave(JsonObject &message) {
 	}
 }
 
+void check_action_groups_enabled(JsonObject& rj)
+{
+	if (rj.containsKey("ag_state")) {
+		int data=rj["ag_state"];
+		int mask=1;
+		for( int bit=0; bit<10; bit++)
+		{
+			if ( data & mask )
+			{
+				action_group_buttons[bit]->setLight(true);
+			}
+			else
+			{
+				action_group_buttons[bit]->setLight(false);
+			}
+			mask=mask*2;
+		}
+	}
+}
+
 void check_button_enabled(JsonObject& rj, const char *key, int button_index) {
 	if (rj.containsKey(key)) {
 		int val = rj[key];
@@ -354,6 +377,7 @@ void check_for_command() {
 			check_button_enabled(rj, "gear", GEAR_BUTTON);
 			check_button_enabled(rj, "light", LIGHT_BUTTON);
 			check_button_enabled(rj, "brakes", BRAKES_BUTTON);
+			check_action_groups_enabled(rj);
 
 			if (rj.containsKey("speed")) {
 				print_led(&led_top, (long) rj["speed"]);
