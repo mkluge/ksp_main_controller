@@ -449,10 +449,10 @@ void loop()
 	check_serial_port();
 	StaticJsonBuffer<READ_BUFFER_SIZE> writeBuffer;
 	JsonObject& root = writeBuffer.createObject();
-	if( message_complete == true )
-	{
-		root["chip"]=read_buffer;
-	}
+//	if( message_complete == true )
+//	{
+//		root["chip"]=read_buffer;
+//	}
 
 	LOOP_OVER(NUM_ANALOG_BUTTONS)
 	{
