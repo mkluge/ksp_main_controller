@@ -27,12 +27,13 @@
 
  */
 
-#define READ_BUFFER_SIZE 400
+#define READ_BUFFER_SIZE 300
 char read_buffer[READ_BUFFER_SIZE];
 unsigned int read_buffer_offset = 0;
 int empty_buffer_size = 0;
 bool have_handshake = false;
 bool stage_enabled = false;
+bool message_complete = false;
 #define PCF_BASE_ADDRESS 0x38
 #define LOOP_OVER(X) for( int index=0; index<X; index++)
 
@@ -119,6 +120,7 @@ bool interrupt_seen = false;
 void wait_for_handshake();
 void awakeSlave();
 void dieError(int code);
+void reset_serial_buffer();
 
 void setupLC(LedControl &lc, int intensity) {
 	lc.shutdown(0, false); // turn off power saving, enables display
@@ -189,7 +191,7 @@ void testAllButtons(JsonObject& root) {
 
 void setup() {
 
-	Serial.begin(38400);
+	Serial.begin(115200);
 	Wire.begin();
 	awakeSlave();
 
@@ -247,6 +249,7 @@ void setup() {
 	pinMode(19, INPUT);
 	empty_buffer_size = Serial.availableForWrite();
 	wait_for_handshake();
+	reset_serial_buffer();
 	// wait for the i2c slave to initialize
 	delay(100);
 	print_led(&led_top, "--");
@@ -256,40 +259,73 @@ void setup() {
 void reset_serial_buffer() {
 	memset(read_buffer, 0, READ_BUFFER_SIZE);
 	read_buffer_offset = 0;
+	message_complete=false;
 }
 
-/**
- * returns true if buffer contains exactly on line including the "\n"
- * otherwise just stores what is on the serial port and returns false
- */
-bool check_message() {
-	// always read one full message
-	if (Serial.available()) {
-		while(1) {
-			int inByte = Serial.read();
-			if( inByte == -1 )
-			{
-				continue;
-			}
-			if (inByte == '\n') {
-				return true;
-			}
-			if (read_buffer_offset < (READ_BUFFER_SIZE - 1)) {
-				read_buffer[read_buffer_offset] = (char) inByte;
-				read_buffer_offset++;
-			} else {
-				dieError(3);
-			}
+int serial_read_until(char delimiter, int max_bytes)
+{
+	int bytes_read=0;
+	while (1) {
+		if( !Serial.available() )
+		{
+			continue;
+		}
+		bytes_read++;
+		print_led(&led_top, bytes_read);
+		char inByte = Serial.read();
+		if (inByte==delimiter || bytes_read==max_bytes) {
+			message_complete = true;
+			return bytes_read;
+		}
+		if (read_buffer_offset < (READ_BUFFER_SIZE - 1)) {
+			read_buffer[read_buffer_offset] = (char) inByte;
+			read_buffer_offset++;
+		} else {
+			dieError(3);
 		}
 	}
-	return false;
+}
+
+// called automatically when serial data is available
+void check_serial_port() {
+	if ( message_complete==true )
+	{
+		return;
+	}
+	// nothing is waiting, so just leave ...
+	if( !Serial.available() )
+	{
+		return;
+	}
+	// first: read the number of bytes
+	serial_read_until( ':', 10);
+	int bytes_to_read=atoi(read_buffer);
+	print_led(&led_bottom, bytes_to_read);
+	reset_serial_buffer();
+
+	// second: read so many bytes in 32 byte chunks
+	while (bytes_to_read>0) {
+		if( !Serial.available() )
+		{
+			continue;
+		}
+		int bytes_read = serial_read_until( '\n', 32);
+		Serial.print("OK");
+		Serial.flush();
+		bytes_to_read -= bytes_read;
+		if ( message_complete == true )
+		{
+			return;
+		}
+	}
 }
 
 void wait_for_handshake() {
 	reset_serial_buffer();
 	bool dot_on = true;
 	while (true) {
-		if (check_message() == false) {
+		check_serial_port();
+		if (message_complete == false) {
 			if (dot_on == true) {
 				print_led(&led_top, "   .");
 				print_led(&led_bottom, "    ");
@@ -298,7 +334,7 @@ void wait_for_handshake() {
 				print_led(&led_bottom, "   .");
 			}
 			dot_on = !dot_on;
-			delay(1000);
+			delay(100);
 		} else {
 			DynamicJsonBuffer sjb;
 			JsonObject& rj = sjb.parseObject(read_buffer);
@@ -313,7 +349,7 @@ void wait_for_handshake() {
 }
 
 void dieError(int code) {
-	print_led(&led_top, "EEEEEEEE");
+//	print_led(&led_top, "EEEEEEEE");
 	print_led(&led_bottom, code);
 }
 
@@ -367,13 +403,13 @@ void check_button_enabled(JsonObject& rj, const char *key, int button_index) {
 }
 
 void check_for_command() {
-	if (check_message() == true) {
+	if (message_complete == true) {
 		DynamicJsonBuffer readBuffer;
 		JsonObject& rj = readBuffer.parseObject(read_buffer);
 
 		// Lesen, was f�r hier dabei ist
 		if (!rj.success()) {
-			dieError(2);
+			dieError(strlen(read_buffer));
 		} else {
 			check_button_enabled(rj, "rcs", RCS_BUTTON);
 			check_button_enabled(rj, "sas", SAS_BUTTON);
@@ -410,8 +446,14 @@ void awakeSlave()
 
 void loop()
 {
+	check_serial_port();
 	StaticJsonBuffer<READ_BUFFER_SIZE> writeBuffer;
 	JsonObject& root = writeBuffer.createObject();
+	if( message_complete == true )
+	{
+		root["chip"]=read_buffer;
+	}
+
 	LOOP_OVER(NUM_ANALOG_BUTTONS)
 	{
 		AnalogInput *i = analog_inputs[index];
@@ -433,7 +475,6 @@ void loop()
 	{
 		root.remove("stage");
 	}
-//	root["chip"]=kc5.getCurrentSignal();
 
 	// if we have data and can send (nothing is in the buffer)
 	if (root.size() > 0 && (Serial.availableForWrite() == empty_buffer_size)) {
