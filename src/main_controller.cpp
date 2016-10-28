@@ -273,8 +273,13 @@ int serial_read_until(char delimiter, int max_bytes)
 		bytes_read++;
 		print_led(&led_top, bytes_read);
 		char inByte = Serial.read();
-		if (inByte==delimiter || bytes_read==max_bytes) {
+		// we are done if we have reached the delimiter
+		if (inByte==delimiter) {
 			message_complete = true;
+			return bytes_read;
+		}
+		// or if we've read the max number of bytes
+		if( bytes_read==max_bytes ) {
 			return bytes_read;
 		}
 		if (read_buffer_offset < (READ_BUFFER_SIZE - 1)) {
@@ -305,10 +310,6 @@ void check_serial_port() {
 
 	// second: read so many bytes in 32 byte chunks
 	while (bytes_to_read>0) {
-		if( !Serial.available() )
-		{
-			continue;
-		}
 		int bytes_read = serial_read_until( '\n', 32);
 		Serial.print("OK");
 		Serial.flush();
