@@ -248,10 +248,7 @@ void setup() {
 
 	pinMode(19, INPUT);
 	empty_buffer_size = Serial.availableForWrite();
-	wait_for_handshake();
 	// wait for the i2c slave to initialize
-	delay(100);
-	print_led(&led_top, "--");
 	delay(100);
 }
 
@@ -316,34 +313,6 @@ void check_serial_port() {
 		if ( message_complete == true )
 		{
 			return;
-		}
-	}
-}
-
-void wait_for_handshake() {
-	reset_serial_buffer();
-	bool dot_on = true;
-	while (true) {
-		check_serial_port();
-		if (message_complete == false) {
-			if (dot_on == true) {
-				print_led(&led_top, "   .");
-				print_led(&led_bottom, "    ");
-			} else {
-				print_led(&led_top, "    ");
-				print_led(&led_bottom, "   .");
-			}
-			dot_on = !dot_on;
-			delay(100);
-		} else {
-			DynamicJsonBuffer sjb;
-			JsonObject& rj = sjb.parseObject(read_buffer);
-			// the only way to get this thing going
-			if (rj.success() && rj["start"] == 2016) {
-				reset_serial_buffer();
-				have_handshake = true;
-				return;
-			}
 		}
 	}
 }
@@ -460,9 +429,6 @@ void read_console_updates(JsonObject& root)
 
 void loop()
 {
-	StaticJsonBuffer<READ_BUFFER_SIZE> writeBuffer;
-	JsonObject& root = writeBuffer.createObject();
-
 	check_serial_port();
 //	if( message_complete == true )
 //	{
@@ -479,28 +445,55 @@ void loop()
 			{
 				dieError(7);
 			}
-			if( root["cmd"]=="get" )
+			if( rj["cmd"] == 1 )
 			{
+				StaticJsonBuffer<READ_BUFFER_SIZE> writeBuffer;
+				JsonObject& root = writeBuffer.createObject();
 				read_console_updates(root);
-				if (root.size() > 0 && (Serial.availableForWrite() == empty_buffer_size)) {
-					root.printTo(Serial);
-					Serial.print('\n');
-					Serial.flush();
-				}
+				root.printTo(Serial);
+				Serial.print('\n');
+				Serial.flush();
 			}
-			else if( root["cmd"]=="update" )
+			else if( rj["cmd"]== 2 )
 			{
 				update_console(rj);
 			}
-			else if( root["cmd"]=="start" )
+			else if( rj["cmd"]== 3 )
 			{
-				// to be implemented
+				print_led(&led_top, "    ");
+				print_led(&led_bottom, "    ");
+				have_handshake = true;
 			}
-			else if( root["cmd"]=="reset" )
+			else if( rj["cmd"]== 4 )
 			{
 				// to be implemented
 			}
 		}
 		reset_serial_buffer();
+	}
+  // some funny blinking as long as we dont have a handshake
+	if( !have_handshake )
+	{
+		static int digit=0;
+		static int up_or_down = 0;
+
+		print_led(&led_top, "    ");
+		print_led(&led_bottom, "    ");
+
+		if( up_or_down== 0 )
+		{
+			led_top.setChar( 0, digit, ' ', true);
+		}
+		else
+		{
+			led_bottom.setChar( 0, digit, ' ', true);
+		}
+
+		digit++;
+		if( digit==7 )
+		{
+			up_or_down = ( up_or_down==0 ) ? 1 : 0;
+			digit = 0;
+		}
 	}
 }
