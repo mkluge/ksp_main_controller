@@ -27,7 +27,7 @@
 
  */
 
-#define READ_BUFFER_SIZE 300
+#define READ_BUFFER_SIZE 400
 char read_buffer[READ_BUFFER_SIZE];
 unsigned int read_buffer_offset = 0;
 int empty_buffer_size = 0;
@@ -266,9 +266,15 @@ int serial_read_until(char delimiter, int max_bytes)
 		{
 			continue;
 		}
-		bytes_read++;
 //		print_led(&led_top, bytes_read);
 		char inByte = Serial.read();
+		bytes_read++;
+		if (read_buffer_offset < (READ_BUFFER_SIZE - 1)) {
+			read_buffer[read_buffer_offset] = (char) inByte;
+			read_buffer_offset++;
+		} else {
+			dieError(99);
+		}
 		// we are done if we have reached the delimiter
 		if (inByte==delimiter) {
 			message_complete = true;
@@ -277,12 +283,6 @@ int serial_read_until(char delimiter, int max_bytes)
 		// or if we've read the max number of bytes
 		if( bytes_read==max_bytes ) {
 			return bytes_read;
-		}
-		if (read_buffer_offset < (READ_BUFFER_SIZE - 1)) {
-			read_buffer[read_buffer_offset] = (char) inByte;
-			read_buffer_offset++;
-		} else {
-			dieError(3);
 		}
 	}
 }
@@ -429,6 +429,9 @@ void read_console_updates(JsonObject& root)
 
 void loop()
 {
+	static char last_failed_buffer[READ_BUFFER_SIZE];
+	static bool have_failed_buffer = false;
+	reset_serial_buffer();
 	check_serial_port();
 //	if( message_complete == true )
 //	{
@@ -437,9 +440,14 @@ void loop()
 	if (message_complete == true) {
 		DynamicJsonBuffer readBuffer;
 		JsonObject& rj = readBuffer.parseObject(read_buffer);
+		if( have_failed_buffer==false )
+		{
+			memccpy( last_failed_buffer, read_buffer, 1, READ_BUFFER_SIZE);
+		}
 
 		if (!rj.success()) {
 			dieError(2);
+			have_failed_buffer = true;
 		} else {
 			if( !rj.containsKey("cmd") )
 			{
@@ -450,6 +458,11 @@ void loop()
 				StaticJsonBuffer<READ_BUFFER_SIZE> writeBuffer;
 				JsonObject& root = writeBuffer.createObject();
 				read_console_updates(root);
+				if( have_failed_buffer==true )
+				{
+					root["chip"]=(char*)last_failed_buffer;
+					have_failed_buffer=false;
+				}
 				root.printTo(Serial);
 				Serial.print('\n');
 				Serial.flush();
@@ -460,8 +473,8 @@ void loop()
 			}
 			else if( rj["cmd"]== 3 )
 			{
-				print_led(&led_top, "    ");
-				print_led(&led_bottom, "    ");
+				print_led(&led_top, "        ");
+				print_led(&led_bottom, "        ");
 				have_handshake = true;
 			}
 			else if( rj["cmd"]== 4 )
@@ -469,16 +482,16 @@ void loop()
 				// to be implemented
 			}
 		}
-		reset_serial_buffer();
 	}
   // some funny blinking as long as we dont have a handshake
 	if( !have_handshake )
 	{
+		delay(50);
 		static int digit=0;
 		static int up_or_down = 0;
 
-		print_led(&led_top, "    ");
-		print_led(&led_bottom, "    ");
+		print_led(&led_top, "        ");
+		print_led(&led_bottom, "        ");
 
 		if( up_or_down== 0 )
 		{
