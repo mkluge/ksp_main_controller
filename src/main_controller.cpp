@@ -249,7 +249,6 @@ void setup() {
 	pinMode(19, INPUT);
 	empty_buffer_size = Serial.availableForWrite();
 	wait_for_handshake();
-	reset_serial_buffer();
 	// wait for the i2c slave to initialize
 	delay(100);
 	print_led(&led_top, "--");
@@ -271,7 +270,7 @@ int serial_read_until(char delimiter, int max_bytes)
 			continue;
 		}
 		bytes_read++;
-		print_led(&led_top, bytes_read);
+//		print_led(&led_top, bytes_read);
 		char inByte = Serial.read();
 		// we are done if we have reached the delimiter
 		if (inByte==delimiter) {
@@ -305,7 +304,7 @@ void check_serial_port() {
 	// first: read the number of bytes
 	serial_read_until( ':', 10);
 	int bytes_to_read=atoi(read_buffer);
-	print_led(&led_bottom, bytes_to_read);
+//	print_led(&led_bottom, bytes_to_read);
 	reset_serial_buffer();
 
 	// second: read so many bytes in 32 byte chunks
@@ -341,16 +340,16 @@ void wait_for_handshake() {
 			JsonObject& rj = sjb.parseObject(read_buffer);
 			// the only way to get this thing going
 			if (rj.success() && rj["start"] == 2016) {
+				reset_serial_buffer();
 				have_handshake = true;
 				return;
 			}
-			reset_serial_buffer();
 		}
 	}
 }
 
 void dieError(int code) {
-//	print_led(&led_top, "EEEEEEEE");
+	print_led(&led_top, "EEEEEEEE");
 	print_led(&led_bottom, code);
 }
 
@@ -403,37 +402,26 @@ void check_button_enabled(JsonObject& rj, const char *key, int button_index) {
 	}
 }
 
-void check_for_command() {
-	if (message_complete == true) {
-		DynamicJsonBuffer readBuffer;
-		JsonObject& rj = readBuffer.parseObject(read_buffer);
+void update_console(JsonObject &rj)
+{
+  check_button_enabled(rj, "rcs", RCS_BUTTON);
+	check_button_enabled(rj, "sas", SAS_BUTTON);
+	check_button_enabled(rj, "gear", GEAR_BUTTON);
+	check_button_enabled(rj, "light", LIGHT_BUTTON);
+	check_button_enabled(rj, "brakes", BRAKES_BUTTON);
+	check_action_groups_enabled(rj);
 
-		// Lesen, was f�r hier dabei ist
-		if (!rj.success()) {
-			dieError(strlen(read_buffer));
-		} else {
-			check_button_enabled(rj, "rcs", RCS_BUTTON);
-			check_button_enabled(rj, "sas", SAS_BUTTON);
-			check_button_enabled(rj, "gear", GEAR_BUTTON);
-			check_button_enabled(rj, "light", LIGHT_BUTTON);
-			check_button_enabled(rj, "brakes", BRAKES_BUTTON);
-			check_action_groups_enabled(rj);
-
-			if (rj.containsKey("speed")) {
-				print_led(&led_top, (long) rj["speed"]);
-				rj.remove("speed");
-			}
-			if (rj.containsKey("height")) {
-				print_led(&led_bottom, (long) rj["height"]);
-				rj.remove("height");
-			}
-
-			// wenn noch lang genug -> display controller
-			if (rj.size() > 0) {
-				sendToSlave(rj);
-			}
-		}
-		reset_serial_buffer();
+	if (rj.containsKey("speed")) {
+	  print_led(&led_top, (long) rj["speed"]);
+	  rj.remove("speed");
+	}
+	if (rj.containsKey("height")) {
+	  print_led(&led_bottom, (long) rj["height"]);
+	  rj.remove("height");
+	}
+	// wenn noch lang genug -> display controller
+	if (rj.size() > 0) {
+	  sendToSlave(rj);
 	}
 }
 
@@ -445,16 +433,8 @@ void awakeSlave()
 	sendToSlave(rj);
 }
 
-void loop()
+void read_console_updates(JsonObject& root)
 {
-	check_serial_port();
-	StaticJsonBuffer<READ_BUFFER_SIZE> writeBuffer;
-	JsonObject& root = writeBuffer.createObject();
-//	if( message_complete == true )
-//	{
-//		root["chip"]=read_buffer;
-//	}
-
 	LOOP_OVER(NUM_ANALOG_BUTTONS)
 	{
 		AnalogInput *i = analog_inputs[index];
@@ -476,12 +456,51 @@ void loop()
 	{
 		root.remove("stage");
 	}
+}
 
-	// if we have data and can send (nothing is in the buffer)
-	if (root.size() > 0 && (Serial.availableForWrite() == empty_buffer_size)) {
-		root.printTo(Serial);
-		Serial.print('\n');
-		Serial.flush();
+void loop()
+{
+	StaticJsonBuffer<READ_BUFFER_SIZE> writeBuffer;
+	JsonObject& root = writeBuffer.createObject();
+
+	check_serial_port();
+//	if( message_complete == true )
+//	{
+//		root["chip"]=read_buffer;
+//	}
+	if (message_complete == true) {
+		DynamicJsonBuffer readBuffer;
+		JsonObject& rj = readBuffer.parseObject(read_buffer);
+
+		if (!rj.success()) {
+			dieError(2);
+		} else {
+			if( !rj.containsKey("cmd") )
+			{
+				dieError(7);
+			}
+			if( root["cmd"]=="get" )
+			{
+				read_console_updates(root);
+				if (root.size() > 0 && (Serial.availableForWrite() == empty_buffer_size)) {
+					root.printTo(Serial);
+					Serial.print('\n');
+					Serial.flush();
+				}
+			}
+			else if( root["cmd"]=="update" )
+			{
+				update_console(rj);
+			}
+			else if( root["cmd"]=="start" )
+			{
+				// to be implemented
+			}
+			else if( root["cmd"]=="reset" )
+			{
+				// to be implemented
+			}
+		}
+		reset_serial_buffer();
 	}
-	check_for_command();
 }
