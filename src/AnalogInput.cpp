@@ -7,7 +7,7 @@
 
 #include "AnalogInput.h"
 
-AnalogInput::AnalogInput( short section_id, int pin, bool get_diff) {
+AnalogInput::AnalogInput( unsigned short section_id, unsigned short pin, bool get_diff) {
 	this->section_id = section_id;
 	this->pin = pin;
 	this->last_value = 0;
@@ -28,18 +28,20 @@ void AnalogInput::calibrate() {
 	last_value = reference_value;
 }
 
-void AnalogInput::readInto(JsonObject& root, bool only_on_diff) {
+void AnalogInput::readInto(JsonArray& root, bool only_on_diff) {
 	int val = readValue();
 
 	if ( only_on_diff==false || abs(val-last_value)>20 )
 	{
 		if( get_diff )
 		{
-			root[section_id] = val-reference_value;
+			root.add(section_id);
+			root.add(val-reference_value);
 		}
 		else
 		{
-			root[section_id] = val;
+			root.add(section_id);
+			root.add(val);
 		}
 		this->last_value = val;
 	}

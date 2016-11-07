@@ -6,6 +6,7 @@
 #include "PCF8574.h"
 #include "Wire.h"
 #include "LedControl.h"
+#include "ksp_display_defines.h"
 
 /*
  chip(pin)
@@ -27,7 +28,7 @@
 
  */
 
-#define READ_BUFFER_SIZE 400
+#define READ_BUFFER_SIZE 300
 char read_buffer[READ_BUFFER_SIZE];
 unsigned int read_buffer_offset = 0;
 int empty_buffer_size = 0;
@@ -35,18 +36,21 @@ bool have_handshake = false;
 bool stage_enabled = false;
 bool message_complete = false;
 #define PCF_BASE_ADDRESS 0x38
-#define LOOP_OVER(X) for( int index=0; index<X; index++)
+#define LOOP_OVER(X) for( unsigned short index=0; index<X; index++)
+#define KEY_NOT_FOUND -1
+#define GET_RID_OF( data, index) data.removeAt(index); data.removeAt(index+1);
+
 
 LedControl led_top(5, 7, 6, 1);
 LedControl led_bottom(8, 10, 9, 1);
 
-AnalogInput ai1("yaw", A5, true);
-AnalogInput ai2("pitch", A6, true);
-AnalogInput ai3("roll", A7, true);
-AnalogInput ai4("xtrans", A2, true);
-AnalogInput ai5("ytrans", A3, true);
-AnalogInput ai6("ztrans", A1, true);
-AnalogInput ai7("thrust", A0, false);
+AnalogInput ai1( KSP_INPUT_YAW, A5, true);
+AnalogInput ai2( KSP_INPUT_PITCH, A6, true);
+AnalogInput ai3( KSP_INPUT_ROLL, A7, true);
+AnalogInput ai4( KSP_INPUT_XTRANS, A2, true);
+AnalogInput ai5( KSP_INPUT_YTRANS, A3, true);
+AnalogInput ai6( KSP_INPUT_ZTRANS, A1, true);
+AnalogInput ai7( KSP_INPUT_THRUST, A0, false);
 
 PCF8574 kc1(PCF_BASE_ADDRESS + 0);
 PCF8574 kc2(PCF_BASE_ADDRESS + 1);
@@ -58,62 +62,62 @@ PCF8574 lc1(PCF_BASE_ADDRESS + 5);
 PCF8574 lc2(PCF_BASE_ADDRESS + 6);
 
 // main buttons
-LightButton lb1("stage", &kc1, 4, &lc1, 0);
-LightButton lb2("rcs", &kc1, 5, &lc1, 1);
-LightButton lb3("sas", &kc1, 6, &lc2, 0);
-LightButton lb4("gear", &kc1, 7, &lc2, 1);
-LightButton lb5("switch_right", &kc5, 6);
-LightButton lb6("switch_left", &kc5, 7);
-LightButton lb7("lights", &kc2, 7, NULL, 0);
-LightButton lb8("brakes", &kc1, 0, NULL, 0);
+LightButton lb1( BUTTON_STAGE, &kc1, 4, &lc1, 0);
+LightButton lb2( BUTTON_RCS, &kc1, 5, &lc1, 1);
+LightButton lb3( BUTTON_SAS, &kc1, 6, &lc2, 0);
+LightButton lb4( BUTTON_GEAR, &kc1, 7, &lc2, 1);
+LightButton lb5( BUTTON_SWITCH_RIGHT, &kc5, 6);
+LightButton lb6( BUTTON_SWITCH_LEFT, &kc5, 7);
+LightButton lb7( BUTTON_LIGHTS, &kc2, 7, NULL, 0);
+LightButton lb8( BUTTON_BREAKS, &kc1, 0, NULL, 0);
 
 // Led panel 0-9 : 2(3) 2(4-7) 3(4) 3(0-3)
 // licht 6(0-7) und 7(0-7)
-LightButton lb9( "ag1", &kc2, 3, &lc2, 0);
-LightButton lb10("ag2", &kc2, 4, &lc2, 1);
-LightButton lb11("ag3", &kc2, 5, &lc2, 2);
-LightButton lb12("ag4", &kc2, 6, &lc2, 3);
-LightButton lb13("ag5", &kc2, 7, &lc2, 4);
-LightButton lb14("ag6", &kc3, 4, &lc2, 5);
-LightButton lb15("ag7", &kc3, 0, &lc2, 6);
-LightButton lb16("ag8", &kc3, 1, &lc2, 7);
-LightButton lb17("ag9", &kc3, 2, &lc1, 6);
-LightButton lb18("ag10", &kc3, 3, &lc1, 7);
+LightButton  lb9( BUTTON_ACTION_1, &kc2, 3, &lc2, 0);
+LightButton lb10( BUTTON_ACTION_2, &kc2, 4, &lc2, 1);
+LightButton lb11( BUTTON_ACTION_3, &kc2, 5, &lc2, 2);
+LightButton lb12( BUTTON_ACTION_4, &kc2, 6, &lc2, 3);
+LightButton lb13( BUTTON_ACTION_5, &kc2, 7, &lc2, 4);
+LightButton lb14( BUTTON_ACTION_6, &kc3, 4, &lc2, 5);
+LightButton lb15( BUTTON_ACTION_7, &kc3, 0, &lc2, 6);
+LightButton lb16( BUTTON_ACTION_8, &kc3, 1, &lc2, 7);
+LightButton lb17( BUTTON_ACTION_9, &kc3, 2, &lc1, 6);
+LightButton lb18( BUTTON_ACTION_10, &kc3, 3, &lc1, 7);
 LightButton *action_group_buttons[10] = {
 	&lb9, &lb10, &lb11, &lb12, &lb13, &lb14, &lb15, &lb16, &lb17, &lb18,
 };
 
 // all solar in out
-LightButton lb19("solar1", &kc4, 4, NULL, 0);
-LightButton lb20("solar0", &kc4, 3, NULL, 0);
+LightButton lb19( BUTTON_SOLAR_ON, &kc4, 4, NULL, 0);
+LightButton lb20( BUTTON_SOLAR_OFF, &kc4, 3, NULL, 0);
 
-#define NUM_ANALOG_BUTTONS 7
-#define NUM_KEY_CHIPS 5
-#define NUM_LED_CHIPS 2
-#define NUM_LIGHT_BUTTONS 20
-
-AnalogInput *analog_inputs[NUM_ANALOG_BUTTONS] = {
+AnalogInput *analog_inputs[] = {
 		&ai1, &ai2, &ai3, &ai4, &ai5, &ai6, &ai7
 };
-PCF8574 *key_chips[NUM_KEY_CHIPS] = {
+PCF8574 *key_chips[] = {
 		&kc1, &kc2, &kc3, &kc4, &kc5
 };
-PCF8574 *led_chips[NUM_LED_CHIPS] = {
+PCF8574 *led_chips[] = {
 		&lc1, &lc2
 };
-LightButton *buttons[NUM_LIGHT_BUTTONS] = {
+LightButton *buttons[] = {
 	&lb1, &lb2, &lb3, &lb4, &lb5, &lb6, &lb7, &lb8, &lb9,
 	&lb10, &lb11, &lb12, &lb13, &lb14, &lb15, &lb16, &lb17, &lb18, &lb19,
 	&lb20
 };
 
+#define NUM_ANALOG_BUTTONS sizeof(analog_inputs)/sizeof(AnalogInput*)
+#define NUM_KEY_CHIPS sizeof(key_chips)/sizeof(PCF8574*)
+#define NUM_LED_CHIPS sizeof(led_chips)/sizeof(PCF8574*)
+#define NUM_LIGHT_BUTTONS sizeof(buttons)/sizeof(LightButton*)
+
 // some button indizes for easier handling
-#define STAGE_BUTTON 0
-#define RCS_BUTTON 1
-#define SAS_BUTTON 2
-#define GEAR_BUTTON 3
-#define LIGHT_BUTTON 6
-#define BRAKES_BUTTON 7
+#define STAGE_BUTTON_INDEX 0
+#define RCS_BUTTON_INDEX 1
+#define SAS_BUTTON_INDEX 2
+#define GEAR_BUTTON_INDEX 3
+#define LIGHT_BUTTON_INDEX 6
+#define BRAKES_BUTTON_INDEX 7
 
 bool interrupt_seen = false;
 
@@ -121,6 +125,18 @@ void wait_for_handshake();
 void awakeSlave();
 void dieError(int code);
 void reset_serial_buffer();
+
+signed int check_for_key( JsonArray &data, short key)
+{
+	for( unsigned int index=0; index<data.size(); index+=2)
+	{
+		if( data[index]==key )
+		{
+			return index;
+		}
+	}
+	return KEY_NOT_FOUND;
+}
 
 void setupLC(LedControl &lc, int intensity) {
 	lc.shutdown(0, false); // turn off power saving, enables display
@@ -164,7 +180,7 @@ void print_led(LedControl *target, const char *str) {
  * checks all buttons and if anyone changed its state, adds the new state
  * of the botton to the json object
  */
-void testAllButtons(JsonObject& root) {
+void testAllButtons(JsonArray& root) {
 // update chips
 	LOOP_OVER(NUM_KEY_CHIPS) {
 		PCF8574 *pcf8754 = key_chips[index];
@@ -178,8 +194,8 @@ void testAllButtons(JsonObject& root) {
 					if (button != NULL)
 					{
 						// low active inputs
-						root[button->getName()] =
-								(pcf8754->testPin(current_bit) == false) ? 1 : 0;
+						root.add( button->getID());
+						root.add( (pcf8754->testPin(current_bit) == false) ? 1 : 0);
 					}
 				}
 				current_bit++;
@@ -298,7 +314,7 @@ void check_serial_port() {
 	{
 		return;
 	}
-	// first: read the number of bytes
+	// first: read the number of bytes, schould'nt be nore than 10
 	serial_read_until( ':', 10);
 	int bytes_to_read=atoi(read_buffer);
 //	print_led(&led_bottom, bytes_to_read);
@@ -307,7 +323,7 @@ void check_serial_port() {
 	// second: read so many bytes in 32 byte chunks
 	while (bytes_to_read>0) {
 		int bytes_read = serial_read_until( '\n', 32);
-		Serial.print("OK");
+		Serial.print(F("OK"));
 		Serial.flush();
 		bytes_to_read -= bytes_read;
 		if ( message_complete == true )
@@ -318,7 +334,7 @@ void check_serial_port() {
 }
 
 void dieError(int code) {
-	print_led(&led_top, "EEEEEEEE");
+	print_led(&led_top, 33333333);
 	print_led(&led_bottom, code);
 }
 
@@ -342,10 +358,11 @@ void sendToSlave(JsonObject &message) {
 	}
 }
 
-void check_action_groups_enabled(JsonObject& rj)
+void check_action_groups_enabled(JsonArray& rj)
 {
-	if (rj.containsKey("ag_state")) {
-		int data=rj["ag_state"];
+	auto index = check_for_key( rj, INFO_ACTION_GROUPS);
+	if ( index!=KEY_NOT_FOUND ) {
+		int data=rj[index+1];
 		int mask=1;
 		for( int bit=0; bit<10; bit++)
 		{
@@ -359,38 +376,43 @@ void check_action_groups_enabled(JsonObject& rj)
 			}
 			mask=mask*2;
 		}
+		GET_RID_OF( rj, index);
 	}
 }
 
-void check_button_enabled(JsonObject& rj, const char *key, int button_index) {
-	if (rj.containsKey(key)) {
-		int val = rj[key];
+void check_button_enabled(JsonArray& rj, unsigned short key, unsigned short button_index) {
+	auto index=check_for_key( rj, key);
+	if ( index!=KEY_NOT_FOUND) {
+		int val = rj[index+1];
 		bool state = (val == 1) ? true : false;
 		buttons[button_index]->setLight(state);
-		rj.remove(key);
+		GET_RID_OF( rj, index);
 	}
 }
 
-void update_console(JsonObject &rj)
+void update_console(JsonObject& obj)
 {
-  check_button_enabled(rj, "rcs", RCS_BUTTON);
-	check_button_enabled(rj, "sas", SAS_BUTTON);
-	check_button_enabled(rj, "gear", GEAR_BUTTON);
-	check_button_enabled(rj, "light", LIGHT_BUTTON);
-	check_button_enabled(rj, "brakes", BRAKES_BUTTON);
+	JsonArray& rj=obj["data"];
+  check_button_enabled( rj, BUTTON_RCS, RCS_BUTTON_INDEX);
+	check_button_enabled( rj, BUTTON_SAS, SAS_BUTTON_INDEX);
+	check_button_enabled( rj, BUTTON_GEAR, GEAR_BUTTON_INDEX);
+	check_button_enabled( rj, BUTTON_LIGHTS, LIGHT_BUTTON_INDEX);
+	check_button_enabled( rj, BUTTON_BREAKS, BRAKES_BUTTON_INDEX);
 	check_action_groups_enabled(rj);
 
-	if (rj.containsKey("speed")) {
-	  print_led(&led_top, (long) rj["speed"]);
-	  rj.remove("speed");
+	auto index = check_for_key( rj, INFO_SPEED);
+	if ( index != KEY_NOT_FOUND ) {
+	  print_led( &led_top, (long) rj[index+1]);
+		GET_RID_OF( rj, index);
 	}
-	if (rj.containsKey("height")) {
-	  print_led(&led_bottom, (long) rj["height"]);
-	  rj.remove("height");
+	index = check_for_key( rj, INFO_HEIGHT);
+	if ( index != KEY_NOT_FOUND ) {
+	  print_led(&led_bottom, (long) rj[index+1]);
+	  GET_RID_OF( rj, index);
 	}
 	// wenn noch lang genug -> display controller
 	if (rj.size() > 0) {
-	  sendToSlave(rj);
+	  sendToSlave(obj);
 	}
 }
 
@@ -402,28 +424,33 @@ void awakeSlave()
 	sendToSlave(rj);
 }
 
-void read_console_updates(JsonObject& root)
+void read_console_updates(JsonArray& root)
 {
 	LOOP_OVER(NUM_ANALOG_BUTTONS)
 	{
 		AnalogInput *i = analog_inputs[index];
-		i->readInto(root,false);
+		i->readInto( root, false);
 	}
 	testAllButtons(root);
 	// there are two special buttons :)
 	// the two switches on the right top
-	if (root.containsKey("switch_right")) {
-		key_chips[4]->setPin(4, root["switch_right"]);
-		led_chips[0]->setPin(0, root["switch_right"]);
-		stage_enabled = root["switch_right"];
+	auto index = check_for_key( root, BUTTON_SWITCH_RIGHT);
+	if ( index!=KEY_NOT_FOUND) {
+		bool value = (root[index+1]==1) ? true : false;
+		key_chips[4]->setPin(4, value);
+		led_chips[0]->setPin(0, value);
+		stage_enabled = value;
 	}
-	if (root.containsKey("switch_left")) {
-		kc5.setPin( 5, root["switch_left"]);
+	index = check_for_key( root, BUTTON_SWITCH_LEFT);
+	if ( index!=KEY_NOT_FOUND) {
+		kc5.setPin( 5, (root[index+1]==1) ? true : false);
 	}
 	// let "stage" only pass if staging is enabled
-	if (root.containsKey("stage") && stage_enabled==false)
+	index=check_for_key( root, BUTTON_STAGE);
+	if ( index!=KEY_NOT_FOUND && stage_enabled==false)
 	{
-		root.remove("stage");
+		root.removeAt(index);
+		root.removeAt(index+1);
 	}
 }
 
@@ -457,7 +484,8 @@ void loop()
 			{
 				StaticJsonBuffer<READ_BUFFER_SIZE> writeBuffer;
 				JsonObject& root = writeBuffer.createObject();
-				read_console_updates(root);
+				JsonArray& data = root.createNestedArray("data");
+				read_console_updates(data);
 				if( have_failed_buffer==true )
 				{
 					root["chip"]=(char*)last_failed_buffer;
@@ -469,7 +497,7 @@ void loop()
 			}
 			else if( rj["cmd"]== 2 )
 			{
-				update_console(rj);
+				update_console( rj );
 			}
 			else if( rj["cmd"]== 3 )
 			{

@@ -10,28 +10,25 @@
 
 #include "Arduino.h"
 #include "PCF8574.h"
-#ifndef MAX_NAME_LENGTH
-#define MAX_NAME_LENGTH 20
-#endif
 
 class LightButton {
 public:
-	LightButton( const char *button_name,
+	LightButton( unsigned short section_id,
 			PCF8574 *i2c_button_chip,
-			int i2c_button_chip_pin,
+			unsigned short i2c_button_chip_pin,
 			PCF8574 *i2c_light_chip_address = NULL,
-			int i2c_light_chip_pin = 0);
+			unsigned short i2c_light_chip_pin = 0);
 	virtual ~LightButton();
 	void setLight( bool enable);
-	String getName() const;
+	unsigned short getID() const;
 	bool readState() const;
 
 private:
-	char name[MAX_NAME_LENGTH];
+	unsigned short section_id;
 	PCF8574 *button_chip;
-	int button_pin;
+	unsigned short button_pin;
 	PCF8574 *light_chip;
-	int light_pin;
+	unsigned short light_pin;
 };
 
 #endif /* LIGHTBUTTON_H_ */
