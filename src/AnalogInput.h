@@ -18,7 +18,7 @@
 
 class AnalogInput {
 public:
-	AnalogInput( const char *json_section, int pin, bool get_diff);
+	AnalogInput( short section_id, int pin, bool get_diff);
 	virtual ~AnalogInput();
 
 	void calibrate();
@@ -30,7 +30,7 @@ private:
 	int pin;
 	long reference_value;
 	int last_value;
-	char name[MAX_NAME_LENGTH];
+	short section_id;
 	bool get_diff;
 };
 

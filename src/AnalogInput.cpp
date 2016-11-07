@@ -7,9 +7,8 @@
 
 #include "AnalogInput.h"
 
-AnalogInput::AnalogInput(const char *json_section, int pin, bool get_diff) {
-	memset( name, 0, MAX_NAME_LENGTH);
-	strncpy( name, json_section, MAX_NAME_LENGTH-1);
+AnalogInput::AnalogInput( short section_id, int pin, bool get_diff) {
+	this->section_id = section_id;
 	this->pin = pin;
 	this->last_value = 0;
 	this->reference_value = 0;
@@ -36,11 +35,11 @@ void AnalogInput::readInto(JsonObject& root, bool only_on_diff) {
 	{
 		if( get_diff )
 		{
-			root[name] = val-reference_value;
+			root[section_id] = val-reference_value;
 		}
 		else
 		{
-			root[name] = val;
+			root[section_id] = val;
 		}
 		this->last_value = val;
 	}
