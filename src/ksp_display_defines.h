@@ -32,13 +32,5 @@
 #define INFO_HEIGHT 100
 #define INFO_SPEED 101
 #define INFO_ACTION_GROUPS 102
-#define INFO_
-#define INFO_
-#define INFO_
-#define INFO_
-#define INFO_
-#define INFO_
-#define INFO_
-
 
 #endif // _HAVE_KSP_DISPLAY_DEFINES_
