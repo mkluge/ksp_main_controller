@@ -480,7 +480,7 @@ void loop()
 			{
 				dieError(7);
 			}
-			if( rj["cmd"] == 1 )
+			if( rj["cmd"] == CMD_GET_UPDATES )
 			{
 				StaticJsonBuffer<READ_BUFFER_SIZE> writeBuffer;
 				JsonObject& root = writeBuffer.createObject();
@@ -495,19 +495,15 @@ void loop()
 				Serial.print('\n');
 				Serial.flush();
 			}
-			else if( rj["cmd"]== 2 )
+			else if( rj["cmd"]== CMD_UPDATE_CONSOLE )
 			{
 				update_console( rj );
 			}
-			else if( rj["cmd"]== 3 )
+			else if( rj["cmd"]== CMD_INIT )
 			{
 				print_led(&led_top, "        ");
 				print_led(&led_bottom, "        ");
 				have_handshake = true;
-			}
-			else if( rj["cmd"]== 4 )
-			{
-				// to be implemented
 			}
 		}
 	}
