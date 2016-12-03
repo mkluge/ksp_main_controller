@@ -28,7 +28,7 @@
 
  */
 
-#define READ_BUFFER_SIZE 300
+#define READ_BUFFER_SIZE 400
 char read_buffer[READ_BUFFER_SIZE];
 unsigned int read_buffer_offset = 0;
 int empty_buffer_size = 0;
@@ -125,6 +125,50 @@ void wait_for_handshake();
 void awakeSlave();
 void dieError(int code);
 void reset_serial_buffer();
+
+extern uint8_t _end;
+extern uint8_t __stack;
+uint16_t freemem=1;
+
+void StackPaint(void) __attribute__ ((naked)) __attribute__ ((section (".init1")));
+void StackPaint(void)
+{
+#if 0
+    uint8_t *p = &_end;
+
+    while(p <= &__stack)
+    {
+        *p = STACK_CANARY;
+        p++;
+    }
+#else
+    __asm volatile ("    ldi r30,lo8(_end)\n"
+                    "    ldi r31,hi8(_end)\n"
+                    "    ldi r24,lo8(0xc5)\n" /* STACK_CANARY = 0xc5 */
+                    "    ldi r25,hi8(__stack)\n"
+                    "    rjmp .cmp\n"
+                    ".loop:\n"
+                    "    st Z+,r24\n"
+                    ".cmp:\n"
+                    "    cpi r30,lo8(__stack)\n"
+                    "    cpc r31,r25\n"
+                    "    brlo .loop\n"
+                    "    breq .loop"::);
+#endif
+}
+
+uint16_t StackCount(void)
+{
+	const uint8_t *p = &_end;
+	uint16_t       c = 0;
+
+	while(*p == 0xc5 && p <= &__stack)
+	{
+		p++;
+		c++;
+	}
+	return c;
+}
 
 signed int check_for_key( JsonArray &data, short key)
 {
@@ -454,27 +498,19 @@ void read_console_updates(JsonArray& root)
 	}
 }
 
+#define memchk 	if( freemem==1 ) {freemem=StackCount();}
+
 void loop()
 {
-	static char last_failed_buffer[READ_BUFFER_SIZE];
-	static bool have_failed_buffer = false;
 	reset_serial_buffer();
 	check_serial_port();
-//	if( message_complete == true )
-//	{
-//		root["chip"]=read_buffer;
-//	}
 	if (message_complete == true) {
-		DynamicJsonBuffer readBuffer;
+		StaticJsonBuffer<READ_BUFFER_SIZE> readBuffer;
 		JsonObject& rj = readBuffer.parseObject(read_buffer);
-		if( have_failed_buffer==false )
-		{
-			memccpy( last_failed_buffer, read_buffer, 1, READ_BUFFER_SIZE);
-		}
+		freemem = StackCount();
 
 		if (!rj.success()) {
 			dieError(2);
-			have_failed_buffer = true;
 		} else {
 			if( !rj.containsKey("cmd") )
 			{
@@ -486,11 +522,7 @@ void loop()
 				JsonObject& root = writeBuffer.createObject();
 				JsonArray& data = root.createNestedArray("data");
 				read_console_updates(data);
-				if( have_failed_buffer==true )
-				{
-					root["chip"]=(char*)last_failed_buffer;
-					have_failed_buffer=false;
-				}
+				root["chip"]=freemem;
 				root.printTo(Serial);
 				Serial.print('\n');
 				Serial.flush();
