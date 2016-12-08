@@ -38,8 +38,7 @@ bool message_complete = false;
 #define PCF_BASE_ADDRESS 0x38
 #define LOOP_OVER(X) for( unsigned short index=0; index<X; index++)
 #define KEY_NOT_FOUND -1
-#define GET_RID_OF( data, index) data.removeAt(index); data.removeAt(index+1);
-
+#define GET_RID_OF( data, index) data.removeAt(index+1); data.removeAt(index);
 
 LedControl led_top(5, 7, 6, 1);
 LedControl led_bottom(8, 10, 9, 1);
@@ -68,8 +67,8 @@ LightButton lb3( BUTTON_SAS, &kc1, 6, &lc2, 0);
 LightButton lb4( BUTTON_GEAR, &kc1, 7, &lc2, 1);
 LightButton lb5( BUTTON_SWITCH_RIGHT, &kc5, 6);
 LightButton lb6( BUTTON_SWITCH_LEFT, &kc5, 7);
-LightButton lb7( BUTTON_LIGHTS, &kc2, 7, NULL, 0);
-LightButton lb8( BUTTON_BREAKS, &kc1, 0, NULL, 0);
+LightButton lb7( BUTTON_LIGHTS, &kc2, 7);
+LightButton lb8( BUTTON_BREAKS, &kc1, 0);
 
 // Led panel 0-9 : 2(3) 2(4-7) 3(4) 3(0-3)
 // licht 6(0-7) und 7(0-7)
@@ -97,7 +96,7 @@ AnalogInput *analog_inputs[] = {
 PCF8574 *key_chips[] = {
 		&kc1, &kc2, &kc3, &kc4, &kc5
 };
-PCF8574 *led_chips[] = {
+PCF8574 *light_chips[] = {
 		&lc1, &lc2
 };
 LightButton *buttons[] = {
@@ -106,10 +105,10 @@ LightButton *buttons[] = {
 	&lb20
 };
 
-#define NUM_ANALOG_BUTTONS sizeof(analog_inputs)/sizeof(AnalogInput*)
-#define NUM_KEY_CHIPS sizeof(key_chips)/sizeof(PCF8574*)
-#define NUM_LED_CHIPS sizeof(led_chips)/sizeof(PCF8574*)
-#define NUM_LIGHT_BUTTONS sizeof(buttons)/sizeof(LightButton*)
+#define NUM_ANALOG_BUTTONS 7
+#define NUM_KEY_CHIPS 5
+#define NUM_LIGHT_CHIPS 2
+#define NUM_LIGHT_BUTTONS 20
 
 // some button indizes for easier handling
 #define STAGE_BUTTON_INDEX 0
@@ -126,6 +125,7 @@ void awakeSlave();
 void dieError(int code);
 void reset_serial_buffer();
 
+/*
 extern uint8_t _end;
 extern uint8_t __stack;
 uint16_t freemem=1;
@@ -144,7 +144,7 @@ void StackPaint(void)
 #else
     __asm volatile ("    ldi r30,lo8(_end)\n"
                     "    ldi r31,hi8(_end)\n"
-                    "    ldi r24,lo8(0xc5)\n" /* STACK_CANARY = 0xc5 */
+                    "    ldi r24,lo8(0xc5)\n" // STACK_CANARY = 0xc5
                     "    ldi r25,hi8(__stack)\n"
                     "    rjmp .cmp\n"
                     ".loop:\n"
@@ -169,6 +169,7 @@ uint16_t StackCount(void)
 	}
 	return c;
 }
+*/
 
 signed int check_for_key( JsonArray &data, short key)
 {
@@ -272,17 +273,17 @@ void setup() {
 	}
 
 	// test lamps
-	LOOP_OVER(NUM_LED_CHIPS)
+	LOOP_OVER(NUM_LIGHT_CHIPS)
 	{
-		PCF8574 *led_chip = led_chips[index];
-		led_chip->write(0xff);
+		PCF8574 *light_chip = light_chips[index];
+		light_chip->write(0xff);
 	}
 	print_led(&led_top, 88888888);
 	print_led(&led_bottom, 88888888);
 	delay(1000);
-	LOOP_OVER(NUM_LED_CHIPS) {
-		PCF8574 *led_chip = led_chips[index];
-		led_chip->write(0x00);
+	LOOP_OVER(NUM_LIGHT_CHIPS) {
+		PCF8574 *light_chip = light_chips[index];
+		light_chip->write(0x00);
 	}
 	print_led(&led_top, "        ");
 	print_led(&led_bottom, "        ");
@@ -410,14 +411,7 @@ void check_action_groups_enabled(JsonArray& rj)
 		int mask=1;
 		for( int bit=0; bit<10; bit++)
 		{
-			if ( data & mask )
-			{
-				action_group_buttons[bit]->setLight(true);
-			}
-			else
-			{
-				action_group_buttons[bit]->setLight(false);
-			}
+			action_group_buttons[bit]->setLight( data&mask );
 			mask=mask*2;
 		}
 		GET_RID_OF( rj, index);
@@ -431,6 +425,8 @@ void check_button_enabled(JsonArray& rj, unsigned short key, unsigned short butt
 		bool state = (val == 1) ? true : false;
 		buttons[button_index]->setLight(state);
 		GET_RID_OF( rj, index);
+		if( key==BUTTON_SAS )
+			dieError(88+state);
 	}
 }
 
@@ -443,7 +439,7 @@ void update_console(JsonObject& obj)
 	check_button_enabled( rj, BUTTON_LIGHTS, LIGHT_BUTTON_INDEX);
 	check_button_enabled( rj, BUTTON_BREAKS, BRAKES_BUTTON_INDEX);
 	check_action_groups_enabled(rj);
-
+/*
 	auto index = check_for_key( rj, INFO_SPEED);
 	if ( index != KEY_NOT_FOUND ) {
 	  print_led( &led_top, (long) rj[index+1]);
@@ -454,6 +450,7 @@ void update_console(JsonObject& obj)
 	  print_led(&led_bottom, (long) rj[index+1]);
 	  GET_RID_OF( rj, index);
 	}
+	*/
 	// wenn noch lang genug -> display controller
 	if (rj.size() > 0) {
 	  sendToSlave(obj);
@@ -482,7 +479,7 @@ void read_console_updates(JsonArray& root)
 	if ( index!=KEY_NOT_FOUND) {
 		bool value = (root[index+1]==1) ? true : false;
 		key_chips[4]->setPin(4, value);
-		led_chips[0]->setPin(0, value);
+		light_chips[0]->setPin(0, value);
 		stage_enabled = value;
 	}
 	index = check_for_key( root, BUTTON_SWITCH_LEFT);
@@ -493,13 +490,12 @@ void read_console_updates(JsonArray& root)
 	index=check_for_key( root, BUTTON_STAGE);
 	if ( index!=KEY_NOT_FOUND && stage_enabled==false)
 	{
-		root.removeAt(index);
 		root.removeAt(index+1);
+		root.removeAt(index);
 	}
 }
 
-#define memchk 	if( freemem==1 ) {freemem=StackCount();}
-
+//#define memchk 	if( freemem==1 ) {freemem=StackCount();}
 void loop()
 {
 	reset_serial_buffer();
@@ -507,7 +503,7 @@ void loop()
 	if (message_complete == true) {
 		StaticJsonBuffer<READ_BUFFER_SIZE> readBuffer;
 		JsonObject& rj = readBuffer.parseObject(read_buffer);
-		freemem = StackCount();
+//		freemem = StackCount();
 
 		if (!rj.success()) {
 			dieError(2);
@@ -522,16 +518,16 @@ void loop()
 				JsonObject& root = writeBuffer.createObject();
 				JsonArray& data = root.createNestedArray("data");
 				read_console_updates(data);
-				root["chip"]=freemem;
+//				root["chip"]=freemem;
 				root.printTo(Serial);
 				Serial.print('\n');
 				Serial.flush();
 			}
-			else if( rj["cmd"]== CMD_UPDATE_CONSOLE )
+			else if( rj["cmd"] == CMD_UPDATE_CONSOLE )
 			{
 				update_console( rj );
 			}
-			else if( rj["cmd"]== CMD_INIT )
+			else if( rj["cmd"] == CMD_INIT )
 			{
 				print_led(&led_top, "        ");
 				print_led(&led_bottom, "        ");
