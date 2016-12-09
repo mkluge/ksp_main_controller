@@ -1,6 +1,8 @@
 #ifndef _HAVE_KSP_DISPLAY_DEFINES_
 #define _HAVE_KSP_DISPLAY_DEFINES_
 
+#define KEY_NOT_FOUND -1
+
 #define KSP_INPUT_YAW 1
 #define KSP_INPUT_ROLL 2
 #define KSP_INPUT_PITCH 3
