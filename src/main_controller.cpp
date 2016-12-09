@@ -37,7 +37,6 @@ bool stage_enabled = false;
 bool message_complete = false;
 #define PCF_BASE_ADDRESS 0x38
 #define LOOP_OVER(X) for( unsigned short index=0; index<X; index++)
-#define KEY_NOT_FOUND -1
 #define GET_RID_OF( data, index) data.removeAt(index+1); data.removeAt(index);
 
 LedControl led_top(5, 7, 6, 1);
@@ -72,16 +71,16 @@ LightButton lb8( BUTTON_BREAKS, &kc1, 0);
 
 // Led panel 0-9 : 2(3) 2(4-7) 3(4) 3(0-3)
 // licht 6(0-7) und 7(0-7)
-LightButton  lb9( BUTTON_ACTION_1, &kc2, 3, &lc2, 0);
-LightButton lb10( BUTTON_ACTION_2, &kc2, 4, &lc2, 1);
-LightButton lb11( BUTTON_ACTION_3, &kc2, 5, &lc2, 2);
-LightButton lb12( BUTTON_ACTION_4, &kc2, 6, &lc2, 3);
-LightButton lb13( BUTTON_ACTION_5, &kc2, 7, &lc2, 4);
-LightButton lb14( BUTTON_ACTION_6, &kc3, 4, &lc2, 5);
-LightButton lb15( BUTTON_ACTION_7, &kc3, 0, &lc2, 6);
-LightButton lb16( BUTTON_ACTION_8, &kc3, 1, &lc2, 7);
-LightButton lb17( BUTTON_ACTION_9, &kc3, 2, &lc1, 6);
-LightButton lb18( BUTTON_ACTION_10, &kc3, 3, &lc1, 7);
+LightButton  lb9( BUTTON_ACTION_1, &kc2, 3, &lc2, 2);
+LightButton lb10( BUTTON_ACTION_2, &kc2, 4, &lc2, 3);
+LightButton lb11( BUTTON_ACTION_3, &kc2, 5, &lc2, 4);
+LightButton lb12( BUTTON_ACTION_4, &kc2, 6, &lc2, 5);
+LightButton lb13( BUTTON_ACTION_5, &kc2, 7, &lc2, 6);
+LightButton lb14( BUTTON_ACTION_6, &kc3, 4, &lc2, 7);
+LightButton lb15( BUTTON_ACTION_7, &kc3, 0, &lc1, 2);
+LightButton lb16( BUTTON_ACTION_8, &kc3, 1, &lc1, 3);
+LightButton lb17( BUTTON_ACTION_9, &kc3, 2, &lc1, 5);
+LightButton lb18( BUTTON_ACTION_10, &kc3, 3, &lc1, 6);
 LightButton *action_group_buttons[10] = {
 	&lb9, &lb10, &lb11, &lb12, &lb13, &lb14, &lb15, &lb16, &lb17, &lb18,
 };
