@@ -71,17 +71,17 @@ LightButton lb8( BUTTON_BREAKS, &kc1, 0);
 
 // Led panel 0-9 : 2(3) 2(4-7) 3(4) 3(0-3)
 // licht 6(0-7) und 7(0-7)
-LightButton  lb9( BUTTON_ACTION_1, &kc2, 3, &lc2, 2);
-LightButton lb10( BUTTON_ACTION_2, &kc2, 4, &lc2, 3);
-LightButton lb11( BUTTON_ACTION_3, &kc2, 5, &lc2, 4);
-LightButton lb12( BUTTON_ACTION_4, &kc2, 6, &lc2, 5);
-LightButton lb13( BUTTON_ACTION_5, &kc2, 7, &lc2, 6);
-LightButton lb14( BUTTON_ACTION_6, &kc3, 4, &lc2, 7);
-LightButton lb15( BUTTON_ACTION_7, &kc3, 0, &lc1, 2);
-LightButton lb16( BUTTON_ACTION_8, &kc3, 1, &lc1, 3);
-LightButton lb17( BUTTON_ACTION_9, &kc3, 2, &lc1, 5);
-LightButton lb18( BUTTON_ACTION_10, &kc3, 3, &lc1, 6);
-LightButton *action_group_buttons[10] = {
+LightButton  lb9( BUTTON_ACTION_1, &kc2, 3, &lc1, 2);
+LightButton lb10( BUTTON_ACTION_2, &kc2, 4, &lc1, 4);
+LightButton lb11( BUTTON_ACTION_3, &kc2, 5, &lc1, 5);
+LightButton lb12( BUTTON_ACTION_4, &kc2, 6, &lc1, 6);
+LightButton lb13( BUTTON_ACTION_5, &kc2, 7, &lc1, 7);
+LightButton lb14( BUTTON_ACTION_6, &kc3, 4, &lc2, 2);
+LightButton lb15( BUTTON_ACTION_7, &kc3, 0, &lc2, 4);
+LightButton lb16( BUTTON_ACTION_8, &kc3, 1, &lc2, 5);
+LightButton lb17( BUTTON_ACTION_9, &kc3, 2, &lc2, 6);
+LightButton lb18( BUTTON_ACTION_10, &kc3, 3, &lc2, 7);
+LightButton *action_group_buttons[] = {
 	&lb9, &lb10, &lb11, &lb12, &lb13, &lb14, &lb15, &lb16, &lb17, &lb18,
 };
 
@@ -104,10 +104,10 @@ LightButton *buttons[] = {
 	&lb20
 };
 
-#define NUM_ANALOG_BUTTONS 7
-#define NUM_KEY_CHIPS 5
-#define NUM_LIGHT_CHIPS 2
-#define NUM_LIGHT_BUTTONS 20
+#define NUM_ANALOG_BUTTONS sizeof(analog_inputs)/sizeof(AnalogInput*)
+#define NUM_KEY_CHIPS sizeof(key_chips)/sizeof(PCF8574*)
+#define NUM_LIGHT_CHIPS sizeof(light_chips)/sizeof(PCF8574*)
+#define NUM_LIGHT_BUTTONS sizeof(buttons)/sizeof(LightButton*)
 
 // some button indizes for easier handling
 #define STAGE_BUTTON_INDEX 0
@@ -309,7 +309,17 @@ void setup() {
 	pinMode(19, INPUT);
 	empty_buffer_size = Serial.availableForWrite();
 	// wait for the i2c slave to initialize
-	delay(100);
+
+	for( int bit=0; bit<10; bit++)
+	{
+		action_group_buttons[bit]->setLight( true );
+		delay(100);
+	}
+	for( int bit=0; bit<10; bit++)
+	{
+		action_group_buttons[bit]->setLight( false );
+		delay(100);
+	}
 }
 
 void reset_serial_buffer() {
@@ -424,8 +434,6 @@ void check_button_enabled(JsonArray& rj, unsigned short key, unsigned short butt
 		bool state = (val == 1) ? true : false;
 		buttons[button_index]->setLight(state);
 		GET_RID_OF( rj, index);
-		if( key==BUTTON_SAS )
-			dieError(88+state);
 	}
 }
 
@@ -438,7 +446,7 @@ void update_console(JsonObject& obj)
 	check_button_enabled( rj, BUTTON_LIGHTS, LIGHT_BUTTON_INDEX);
 	check_button_enabled( rj, BUTTON_BREAKS, BRAKES_BUTTON_INDEX);
 	check_action_groups_enabled(rj);
-/*
+
 	auto index = check_for_key( rj, INFO_SPEED);
 	if ( index != KEY_NOT_FOUND ) {
 	  print_led( &led_top, (long) rj[index+1]);
@@ -449,7 +457,7 @@ void update_console(JsonObject& obj)
 	  print_led(&led_bottom, (long) rj[index+1]);
 	  GET_RID_OF( rj, index);
 	}
-	*/
+
 	// wenn noch lang genug -> display controller
 	if (rj.size() > 0) {
 	  sendToSlave(obj);
