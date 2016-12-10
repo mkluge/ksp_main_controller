@@ -72,11 +72,11 @@ LightButton lb8( BUTTON_BREAKS, &kc1, 0);
 // Led panel 0-9 : 2(3) 2(4-7) 3(4) 3(0-3)
 // licht 6(0-7) und 7(0-7)
 LightButton  lb9( BUTTON_ACTION_1, &kc2, 3, &lc1, 2);
-LightButton lb10( BUTTON_ACTION_2, &kc2, 4, &lc1, 4);
-LightButton lb11( BUTTON_ACTION_3, &kc2, 5, &lc1, 5);
-LightButton lb12( BUTTON_ACTION_4, &kc2, 6, &lc1, 6);
-LightButton lb13( BUTTON_ACTION_5, &kc2, 7, &lc1, 7);
-LightButton lb14( BUTTON_ACTION_6, &kc3, 4, &lc2, 2);
+LightButton lb10( BUTTON_ACTION_2, &kc2, 7, &lc1, 4);
+LightButton lb11( BUTTON_ACTION_3, &kc2, 6, &lc1, 5);
+LightButton lb12( BUTTON_ACTION_4, &kc2, 4, &lc1, 6);
+LightButton lb13( BUTTON_ACTION_5, &kc2, 5, &lc1, 7);
+LightButton lb14( BUTTON_ACTION_6, &kc3, 7, &lc2, 2);
 LightButton lb15( BUTTON_ACTION_7, &kc3, 0, &lc2, 4);
 LightButton lb16( BUTTON_ACTION_8, &kc3, 1, &lc2, 5);
 LightButton lb17( BUTTON_ACTION_9, &kc3, 2, &lc2, 6);
