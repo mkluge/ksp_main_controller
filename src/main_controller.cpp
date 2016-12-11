@@ -313,12 +313,12 @@ void setup() {
 	for( int bit=0; bit<10; bit++)
 	{
 		action_group_buttons[bit]->setLight( true );
-		delay(100);
+		delay(20);
 	}
 	for( int bit=0; bit<10; bit++)
 	{
 		action_group_buttons[bit]->setLight( false );
-		delay(100);
+		delay(20);
 	}
 }
 
@@ -416,12 +416,12 @@ void check_action_groups_enabled(JsonArray& rj)
 {
 	auto index = check_for_key( rj, INFO_ACTION_GROUPS);
 	if ( index!=KEY_NOT_FOUND ) {
-		int data=rj[index+1];
-		int mask=1;
+		unsigned int data=rj[index+1];
+		int mask=0x01;
 		for( int bit=0; bit<10; bit++)
 		{
 			action_group_buttons[bit]->setLight( data&mask );
-			mask=mask*2;
+			mask=mask<<1;
 		}
 		GET_RID_OF( rj, index);
 	}
