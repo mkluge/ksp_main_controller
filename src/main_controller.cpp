@@ -7,6 +7,7 @@
 #include "Wire.h"
 #include "LedControl.h"
 #include "ksp_display_defines.h"
+#include "mikemap.h"
 
 /*
  chip(pin)
@@ -156,6 +157,8 @@ void awakeSlave();
 void dieError(int code);
 void reset_serial_buffer();
 
+MikeMap updates;
+
 /*
 extern uint8_t _end;
 extern uint8_t __stack;
@@ -256,7 +259,7 @@ void print_led(LedControl *target, const char *str) {
  * checks all buttons and if anyone changed its state, adds the new state
  * of the botton to the json object
  */
-void testAllButtons(JsonArray& root) {
+void testAllButtons(MikeMap &updates) {
 // update chips
 	LOOP_OVER(NUM_KEY_CHIPS) {
 		PCF8574 *pcf8754 = key_chips[index];
@@ -270,13 +273,12 @@ void testAllButtons(JsonArray& root) {
 					if (button != NULL)
 					{
 						// low active inputs
-						root.add( button->getID());
-						root.add( (pcf8754->testPin(current_bit) == false) ? 1 : 0);
+						updates.set( button->getID(),
+												 (pcf8754->testPin(current_bit) == false) ? 1 : 0);
 					}
 					else
 					{
-						root.add( 400+index);
-						root.add( current_bit);
+						updates.set( 400+index, current_bit);
 					}
 				}
 				current_bit++;
@@ -316,9 +318,10 @@ void setup() {
 	LOOP_OVER(NUM_LIGHT_CHIPS)
 	{
 		PCF8574 *light_chip = light_chips[index];
-		light_chip->write(0x00);
+		light_chip->write(0xff);
 	}
-	LOOP_OVER(NUM_LIGHT_CHIPS)
+
+/*	LOOP_OVER(NUM_LIGHT_CHIPS)
 	{
 		PCF8574 *light_chip = light_chips[index];
 		for( int pin=0; pin<8; pin++)
@@ -332,7 +335,13 @@ void setup() {
 //			}
 		}
 	}
+*/
 	delay(1000);
+	LOOP_OVER(NUM_LIGHT_CHIPS)
+	{
+		PCF8574 *light_chip = light_chips[index];
+		light_chip->write(0x00);
+	}
 	print_led(&led_top, "        ");
 	print_led(&led_bottom, "        ");
 	// first 4 chips have all pins as inputs
@@ -507,33 +516,31 @@ void awakeSlave()
 	sendToSlave(rj);
 }
 
-void read_console_updates(JsonArray& root)
+void read_console_updates(MikeMap &updates)
 {
 	LOOP_OVER(NUM_ANALOG_BUTTONS)
 	{
 		AnalogInput *i = analog_inputs[index];
-		i->readInto( root, false);
+		i->readInto( updates, false);
 	}
-	testAllButtons(root);
+	testAllButtons(updates);
 	// there are two special buttons :)
 	// the two switches on the right top
-	auto index = check_for_key( root, BUTTON_SWITCH_RIGHT);
-	if ( index!=KEY_NOT_FOUND) {
-		bool value = (root[index+1]==1) ? true : false;
+	if ( updates.has(BUTTON_SWITCH_RIGHT))
+	{
+		bool value = (updates.get(BUTTON_SWITCH_RIGHT)==1) ? true : false;
 		key_chips[4]->setPin(4, value);
 		light_chips[0]->setPin(0, value);
 		stage_enabled = value;
 	}
-	index = check_for_key( root, BUTTON_SWITCH_LEFT);
-	if ( index!=KEY_NOT_FOUND) {
-		kc5.setPin( 5, (root[index+1]==1) ? true : false);
+	if ( updates.has(BUTTON_SWITCH_LEFT))
+	{
+		kc5.setPin( 5, (updates.get(BUTTON_SWITCH_LEFT)) ? true : false);
 	}
 	// let "stage" only pass if staging is enabled
-	index=check_for_key( root, BUTTON_STAGE);
-	if ( index!=KEY_NOT_FOUND && stage_enabled==false)
+	if ( updates.get(BUTTON_STAGE) && stage_enabled==false)
 	{
-		root.removeAt(index+1);
-		root.removeAt(index);
+		updates.del(BUTTON_STAGE);
 	}
 }
 
@@ -556,10 +563,20 @@ void loop()
 			}
 			if( rj["cmd"] == CMD_GET_UPDATES )
 			{
+				read_console_updates( updates );
 				StaticJsonBuffer<READ_BUFFER_SIZE> writeBuffer;
 				JsonObject& root = writeBuffer.createObject();
 				JsonArray& data = root.createNestedArray("data");
-				read_console_updates(data);
+				// read all updates and put them into the updates
+				for( int i=0; i<updates.get_len(); i++)
+				{
+					int k;
+					int v;
+					updates.get_at( i, &k, &v);
+					data.add(k);
+					data.add(v);
+				}
+				updates.clear();
 //				root["chip"]=freemem;
 				root.printTo(Serial);
 				Serial.print('\n');
@@ -602,5 +619,10 @@ void loop()
 			up_or_down = ( up_or_down==0 ) ? 1 : 0;
 			digit = 0;
 		}
+	}
+	else
+	{
+		read_console_updates( updates );
+		// check for pressed buttons anyway and store them
 	}
 }
