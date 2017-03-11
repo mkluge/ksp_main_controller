@@ -77,16 +77,16 @@ LightButton lb6( BUTTON_SWITCH_LEFT, &kc5, 7); //OK
 
 // Led panel 0-9 : 2(3) 2(4-7) 3(4) 3(0-3)
 // licht 6(0-7) und 7(0-7)
-LightButton  lb9( BUTTON_ACTION_1, &kc2, 3, &lc2, 0); //OK
-LightButton lb10( BUTTON_ACTION_2, &kc2, 7, &lc2, 1); //OK
-LightButton lb11( BUTTON_ACTION_3, &kc2, 6, &lc2, 2); //OK
-LightButton lb12( BUTTON_ACTION_4, &kc2, 4, &lc2, 3); //OK
-LightButton lb13( BUTTON_ACTION_5, &kc2, 5, &lc2, 4); //OK
-LightButton lb14( BUTTON_ACTION_6, &kc3, 7, &lc2, 5); //OK
-LightButton lb15( BUTTON_ACTION_7, &kc3, 0, &lc2, 6); //OK
-LightButton lb16( BUTTON_ACTION_8, &kc3, 1, &lc2, 7); //OK
-LightButton lb17( BUTTON_ACTION_9, &kc3, 2, &lc1, 6); //OK
-LightButton lb18( BUTTON_ACTION_10, &kc3, 3, &lc1, 7); //OK
+LightButton  lb9( BUTTON_ACTION_1, &kc2, 3, &lc1, 2); //OK
+LightButton lb10( BUTTON_ACTION_2, &kc2, 7, &lc1, 4); //OK
+LightButton lb11( BUTTON_ACTION_3, &kc2, 6, &lc1, 5); //OK
+LightButton lb12( BUTTON_ACTION_4, &kc2, 4, &lc2, 6); //OK
+LightButton lb13( BUTTON_ACTION_5, &kc2, 5, &lc1, 7); //OK
+LightButton lb14( BUTTON_ACTION_6, &kc3, 7, &lc2, 2); //OK
+LightButton lb15( BUTTON_ACTION_7, &kc3, 0, &lc2, 4); //OK
+LightButton lb16( BUTTON_ACTION_8, &kc3, 1, &lc2, 5); //OK
+LightButton lb17( BUTTON_ACTION_9, &kc3, 2, &lc2, 6); //OK
+LightButton lb18( BUTTON_ACTION_10, &kc3, 3, &lc2, 7); //OK
 LightButton *action_group_buttons[10] = {
 	&lb9, &lb10, &lb11, &lb12, &lb13, &lb14, &lb15, &lb16, &lb17, &lb18,
 };
@@ -97,8 +97,8 @@ LightButton lb19( BUTTON_SOLAR_ON, &kc4, 4); //OK
 LightButton lb20( BUTTON_SOLAR_OFF, &kc4, 3); //OK
 LightButton lb21( BUTTON_FUEL, &kc4, 5); //OK
 LightButton lb22( BUTTON_REACTION_WHEELS, &kc4, 6); //OK
-LightButton lb23( BUTTON_ENGINES_ON, &kc4, 7); //OK
-LightButton lb24( BUTTON_ENGINES_OFF, &kc5, 0); //OK
+LightButton lb23( BUTTON_ENGINES_ON, &kc5, 0); //OK
+LightButton lb24( BUTTON_ENGINES_OFF, &kc4, 7); //OK
 
 // 6er unten 4(0-2) ???
 LightButton lb25( BUTTON_STORE, &kc4, 0); //OK
@@ -300,6 +300,9 @@ void setup() {
 		AnalogInput *i = analog_inputs[index];
 		i->calibrate();
 	}
+	// led chips have outputs only
+	lc1.setInputMask( 0x00 );
+	lc2.setInputMask( 0x00 );
 
 	// to act as input, all outputs have to be on HIGH
 	LOOP_OVER(NUM_KEY_CHIPS)
@@ -307,25 +310,31 @@ void setup() {
 		PCF8574 *key_chip = key_chips[index];
 		key_chip->write(0xFF);
 	}
-
+	print_led(&led_top, 88888888);
+	print_led(&led_bottom, 88888888);
 	// test lamps
 	LOOP_OVER(NUM_LIGHT_CHIPS)
 	{
 		PCF8574 *light_chip = light_chips[index];
-		light_chip->write(0xff);
-	}
-	print_led(&led_top, 88888888);
-	print_led(&led_bottom, 88888888);
-	delay(1000);
-	LOOP_OVER(NUM_LIGHT_CHIPS) {
-		PCF8574 *light_chip = light_chips[index];
 		light_chip->write(0x00);
 	}
+	LOOP_OVER(NUM_LIGHT_CHIPS)
+	{
+		PCF8574 *light_chip = light_chips[index];
+		for( int pin=0; pin<8; pin++)
+		{
+//			for( unsigned int i=0; i<(index+1); i++)
+//			{
+				light_chip->setPin( pin, true);
+				delay(100);
+				light_chip->setPin( pin, false);
+				delay(100);
+//			}
+		}
+	}
+	delay(1000);
 	print_led(&led_top, "        ");
 	print_led(&led_bottom, "        ");
-	// led chips have outputs only
-	lc1.setInputMask( 0x00 );
-	lc2.setInputMask( 0x00 );
 	// first 4 chips have all pins as inputs
 	kc1.setInputMask( 0xff );
 	kc2.setInputMask( 0xff );
