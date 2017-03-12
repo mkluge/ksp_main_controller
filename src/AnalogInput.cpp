@@ -28,20 +28,18 @@ void AnalogInput::calibrate() {
 	last_value = reference_value;
 }
 
-void AnalogInput::readInto(JsonArray& root, bool only_on_diff) {
+void AnalogInput::readInto(MikeMap &m, bool only_on_diff) {
 	int val = readValue();
 
 	if ( only_on_diff==false || abs(val-last_value)>20 )
 	{
 		if( get_diff )
 		{
-			root.add(section_id);
-			root.add(val-reference_value);
+			m.set( section_id, val-reference_value);
 		}
 		else
 		{
-			root.add(section_id);
-			root.add(val);
+			m.set( section_id, val);
 		}
 		this->last_value = val;
 	}

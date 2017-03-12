@@ -278,7 +278,7 @@ void testAllButtons(MikeMap &updates) {
 					}
 					else
 					{
-						updates.set( 400+index, current_bit);
+						updates.set( 401+index, current_bit);
 					}
 				}
 				current_bit++;
@@ -622,7 +622,7 @@ void loop()
 	}
 	else
 	{
-		read_console_updates( updates );
 		// check for pressed buttons anyway and store them
+		read_console_updates( updates );
 	}
 }

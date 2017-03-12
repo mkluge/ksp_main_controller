@@ -10,6 +10,7 @@
 
 #include "Arduino.h"
 #include "ArduinoJson.h"
+#include "mikemap.h"
 
 #define CHECK_LOOPS 100
 
@@ -19,7 +20,7 @@ public:
 	virtual ~AnalogInput();
 
 	void calibrate();
-	void readInto( JsonArray& root, bool only_on_diff );
+	void readInto( MikeMap& m, bool only_on_diff );
 
 private:
 	int readValue();
