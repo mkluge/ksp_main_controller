@@ -15,8 +15,11 @@ void MikeMap::set( int key, int value)
       return;
     }
   }
+  if( len==MAX_MAP_LEN )
+    return;
   keys[len]=key;
   values[len]=value;
+  len++;
 }
 
 bool MikeMap::has( int key) const
