@@ -568,7 +568,6 @@ void loop()
 				JsonObject& root = writeBuffer.createObject();
 				JsonArray& data = root.createNestedArray("data");
 				// read all updates and put them into the updates
-				root["chip"]=updates.get_len();
 				for( int i=0; i<updates.get_len(); i++)
 				{
 					int k;
@@ -579,7 +578,6 @@ void loop()
 				}
 				updates.clear();
 //				root["chip"]=freemem;
-				root["baba"]=3;
 				root.printTo(Serial);
 				Serial.print('\n');
 				Serial.flush();
