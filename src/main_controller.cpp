@@ -8,6 +8,7 @@
 #include "LedControl.h"
 #include "ksp_display_defines.h"
 #include "mikemap.h"
+#include <avr/wdt.h>
 
 /*
  chip(pin)
@@ -290,6 +291,7 @@ void testAllButtons(MikeMap &updates) {
 
 void setup() {
 
+	wdt_disable();
 	Serial.begin(115200);
 	Wire.begin();
 	awakeSlave();
@@ -365,6 +367,7 @@ void setup() {
 	empty_buffer_size = Serial.availableForWrite();
 	// wait for the i2c slave to initialize
 	delay(100);
+	wdt_enable(WDTO_2S);
 }
 
 void reset_serial_buffer() {
@@ -547,6 +550,7 @@ void read_console_updates(MikeMap &updates)
 //#define memchk 	if( freemem==1 ) {freemem=StackCount();}
 void loop()
 {
+	wdt_reset();
 	reset_serial_buffer();
 	check_serial_port();
 	if (message_complete == true) {
