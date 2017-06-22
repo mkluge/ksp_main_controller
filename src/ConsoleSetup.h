@@ -10,5 +10,6 @@
 
 
 #define SLAVE_HW_ADDRESS 0x08
+#define KEY_NOT_FOUND -1
 
 #endif /* CONSOLESETUP_H_ */

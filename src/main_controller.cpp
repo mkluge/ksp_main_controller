@@ -39,7 +39,6 @@ bool stage_enabled = false;
 bool message_complete = false;
 #define PCF_BASE_ADDRESS 0x38
 #define LOOP_OVER(X) for( unsigned short index=0; index<X; index++)
-#define KEY_NOT_FOUND -1
 #define GET_RID_OF( data, index) data.removeAt(index+1); data.removeAt(index);
 
 LedControl led_top(5, 7, 6, 1);
