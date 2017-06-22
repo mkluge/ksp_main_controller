@@ -157,7 +157,10 @@ void awakeSlave();
 void dieError(int code);
 void reset_serial_buffer();
 
+/* memorizes pressed buttons until stuff can be sent to master */
 MikeMap updates;
+/* memorizes data that will be send to display */
+MikeMap display_updates;
 
 /*
 extern uint8_t _end;
@@ -275,6 +278,12 @@ void testAllButtons(MikeMap &updates) {
 						// low active inputs
 						updates.set( button->getID(),
 												 (pcf8754->testPin(current_bit) == false) ? 1 : 0);
+					  // remember buttons that trigger the display controller directly
+						if( button->getID()==BUTTON_NEXT_LEFT_LCD_MODE &&
+					      pcf8754->testPin(current_bit) == false) // low active
+						{
+							display_updates.set( BUTTON_NEXT_LEFT_LCD_MODE, 1);
+						}
 					}
 					else
 					{
@@ -505,7 +514,16 @@ void update_console(JsonObject& obj)
 	  GET_RID_OF( rj, index);
 	}
 	// wenn noch lang genug -> display controller
-	if (rj.size() > 0) {
+	if (rj.size() > 0 || display_updates.get_len()>0) {
+		for( int i=0; i<display_updates.get_len(); i++)
+		{
+			int k;
+			int v;
+			display_updates.get_at( i, &k, &v);
+			rj.add(k);
+			rj.add(v);
+		}
+		obj["data"]=rj;
 	  sendToSlave(obj);
 	}
 }
