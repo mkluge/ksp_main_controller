@@ -1,4 +1,21 @@
 #include "mikemap.h"
+#include <ArduinoUnit.h>
+
+test(map)
+{
+  MikeMap mm;
+  assertEqual(mm.get_len(), 0);
+  for( int i=0; i<200; i++)
+    mm.set(i,i);
+  assertEqual(mm.get_len(), MAX_MAP_LEN);
+  mm.del(1);
+  assertEqual(mm.get_len(), MAX_MAP_LEN-1);
+  assertEqual(mm.get(4), 4);
+  assertEqual(mm.has(1), false);
+  assertEqual(mm.has(2), true);
+  mm.clear();
+  assertEqual(mm.get_len(), 0);
+}
 
 MikeMap::MikeMap()
 {
@@ -40,10 +57,10 @@ int MikeMap::get( int key) const
   {
     if( keys[i]==key)
     {
-      return true;
+      return values[i];
     }
   }
-  return false;
+  return 0;
 }
 
 void MikeMap::del( int key)
@@ -75,6 +92,8 @@ void MikeMap::clear()
 
 void MikeMap::get_at( int at, int *key, int *value) const
 {
+  if( at>=len )
+    return;
   *key=keys[at];
   *value=values[at];
 }

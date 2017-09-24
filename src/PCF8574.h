@@ -2,19 +2,14 @@
 #define _PCF8574_H
 
 #include "Arduino.h"
-#define PCF8574_LIB_VERSION "0.1.02"
 
-class LightButton;
 #define debounceDelay 50
+#define PCF_BASE_ADDRESS 0x38
 
 class PCF8574 {
 public:
 	PCF8574(int address);
 
-	// sets the pointer to the button that is connected to a pin
-	void setButtonForPin(short pin, LightButton *button);
-	// gets that pointer
-	LightButton *getButtonForPin(short pin);
 	// updates the internal state, including debouncing the input
 	// returns a byte with all bits set to 1 that changed
 	// if there was a stable state change
@@ -27,13 +22,15 @@ public:
 	bool testPin(short pin);
 	// gets the stored value (debounced)
 	byte getValue();
-
 	void write(byte value);
 	void setPin(short pin, bool value);
+	// each bit set states that this pin is an input and should always bet set to 1
 	void setInputMask( byte mask);
 	long lastUpdate();
 	byte getInputMask();
 	int lastError();
+	// runs a short test (real chip should be connected)
+	void selfTest();
 
 private:
 	// the bits that are 0 are used as inputs
@@ -48,8 +45,6 @@ private:
 	int last_error;
 	// time of last read
 	unsigned long last_update;
-	// the pointer to the button for each pin
-	LightButton *connected_buttons[8];
 };
 
 #endif

@@ -20,7 +20,7 @@ public:
 	virtual ~AnalogInput();
 
 	void calibrate();
-	void readInto( MikeMap& m, bool only_on_diff );
+	void readInto( MikeMap *m, bool only_on_diff );
 
 private:
 	int readValue();

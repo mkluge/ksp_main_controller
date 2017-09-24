@@ -1,29 +1,16 @@
-//
-//    FILE: PCF8574.cpp
-//  AUTHOR: Rob Tillaart
-//    DATE: 02-febr-2013
-// VERSION: 0.1.02
-// PURPOSE: I2C PCF8574 library for Arduino
-//     URL:
-//
-// HISTORY:
-// 0.1.02 replaced ints with byte to reduce footprint;
-//        added default value for shiftLeft() and shiftRight()
-//        renamed status() to lastError();
-// 0.1.01 added value(); returns last read 8 bit value (cached);
-//        value() does not always reflect the latest state of the pins!
-// 0.1.00 initial version
-//
-
 #include "PCF8574.h"
 #include "Arduino.h"
 #include <Wire.h>
+#include <ArduinoUnit.h>
+
+test(pcf8574)
+{
+	PCF8574 test_chip(PCF_BASE_ADDRESS);
+	test_chip.selfTest();
+}
 
 PCF8574::PCF8574(int address) {
 	this->chip_hw_address = address;
-	for (int offset = 0; offset < 8; offset++) {
-		connected_buttons[offset] = NULL;
-	}
 	last_data = 0;
 	last_debounced_data = 0;
 	last_error = 0;
@@ -31,12 +18,26 @@ PCF8574::PCF8574(int address) {
 	input_mask = 0xff;
 }
 
+void PCF8574::selfTest()
+{
+	setInputMask(0xFF);
+	this->write(0xFF);
+	assertEqual( this->last_error, 0);
+	assertEqual( this->testPin(1), false);
+	assertEqual( this->getCurrentSignal(), 0);
+	// simulate that the last thing we've seen is bit 2 set and all other are 0
+	this->last_data = 0x04;
+	this->last_debounced_data = 0x04;
+	this->last_update = millis();
+	assertEqual( this->updateState(), 0);
+	delay(2*debounceDelay);
+	assertEqual( this->updateState(), 0x04);
+}
+
 byte PCF8574::getCurrentSignal()
 {
-//	Wire.beginTransmission(chip_hw_address);
 	Wire.requestFrom(chip_hw_address, 1);
 	int current_data = Wire.read();
-//	last_error = Wire.endTransmission();
 	return current_data;
 }
 
@@ -69,25 +70,11 @@ byte PCF8574::updateState() {
 		}
 	}
 	last_data = current_data;
-	return false;
+	return 0x00;
 }
 
 byte PCF8574::getValue() {
 	return last_debounced_data;
-}
-
-LightButton *PCF8574::getButtonForPin(short pin) {
-	if (pin < 8) {
-		return connected_buttons[pin];
-	} else {
-		return NULL;
-	}
-}
-
-void PCF8574::setButtonForPin(short pin, LightButton *button) {
-	if (pin < 8) {
-		connected_buttons[pin] = button;
-	}
 }
 
 void PCF8574::write(byte value) {
@@ -114,9 +101,9 @@ void PCF8574::setPin(short pin, bool value) {
 	new_data |= input_mask;
 	// remember the byte written as current data
 	// but mask out the output bytes
-	write(new_data);
+	this->write(new_data);
 	last_debounced_data = new_data & input_mask;
-	updateState();
+	this->updateState();
 }
 
 int PCF8574::lastError() {
