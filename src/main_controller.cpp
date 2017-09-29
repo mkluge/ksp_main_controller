@@ -1,3 +1,7 @@
+#undef TEST
+#undef PRINT_DEBUG
+
+#ifndef TEST
 #include "Arduino.h"
 #include "ArduinoJson.h"
 #include "AnalogInput.h"
@@ -8,6 +12,7 @@
 #include "ksp_display_defines.h"
 #include "mikemap.h"
 #include <ArduinoUnit.h>
+
 
 /*
  chip(pin)
@@ -28,8 +33,6 @@
  5 links: oben 1(0) 1(3-7); 3 statt 0??;
 
  */
-
-//#define NOWIRE
 
 #define READ_BUFFER_SIZE 400
 char read_buffer[READ_BUFFER_SIZE];
@@ -174,6 +177,9 @@ MikeMap updates;
 /* memorizes data that will be send to display */
 MikeMap display_updates;
 
+#define STACK_CANARY  0xc5
+uint16_t StackCount(void);
+
 extern uint8_t _end;
 extern uint8_t __stack;
 uint16_t freemem=1;
@@ -203,6 +209,19 @@ void StackPaint(void)
                     "    brlo .loop\n"
                     "    breq .loop"::);
 #endif
+}
+
+uint16_t StackCount(void)
+{
+  const uint8_t *p = &_end;
+  uint16_t       c = 0;
+
+  while(*p == 0xc5 && p <= &__stack)
+  {
+    p++;
+    c++;
+  }
+  return c;
 }
 
 bool getPinForKey( int key, PCF8574 **chip, byte *pin)
@@ -328,19 +347,6 @@ bool getLightFromKey( int key, PCF8574 **lchip, byte *lpin)
 	return false;
 }
 
-uint16_t StackCount(void)
-{
-	const uint8_t *p = &_end;
-	uint16_t       c = 0;
-
-	while(*p == 0xc5 && p <= &__stack)
-	{
-		p++;
-		c++;
-	}
-	return c;
-}
-
 signed int check_for_key( JsonArray &data, short key)
 {
 	for( unsigned int index=0; index<data.size(); index+=2)
@@ -432,19 +438,18 @@ void testAllButtons(MikeMap *updates) {
 }
 
 void setup() {
+	delay(1000);
+	Serial.begin(115200);
+#ifdef PRINT_DEBUG
+	Test::run();
+#endif
 	updates.clear();
 	display_updates.clear();
-	delay(5000);
-	Serial.begin(115200);
-	Serial.println(F("tests startup"));
-	Test::run();
-	Serial.println(F("setup startup"));
-#ifndef NOWIRE
 	Wire.onReceive(receiveEvent);
 	Wire.begin(MAIN_CONTROLLER_I2C_ADDRESS);
+#ifdef PRINT_DEBUG
+	Serial.println(F("setup ende"));
 #endif
-Serial.println(F("setup ende"));
-  return;
 
 	setupLC(led_top, 15);
 	setupLC(led_bottom, 3);
@@ -510,7 +515,9 @@ Serial.println(F("setup ende"));
 	empty_buffer_size = Serial.availableForWrite();
 	// wait for the i2c slave to initialize
 	delay(100);
+#ifdef PRINT_DEBUG
 	Serial.println(F("setup ende"));
+#endif
 }
 
 void reset_serial_buffer() {
@@ -553,7 +560,6 @@ int serial_read_until(char delimiter, int max_bytes)
 void receiveEvent(int how_many) {
 	char buf[10];
 	memset( buf, 0, 10);
-#ifndef NOWIRE
 	int buf_offset=0;
 	while( Wire.available()>0 )
 	{
@@ -567,7 +573,6 @@ void receiveEvent(int how_many) {
 		if( buf_offset<10 )
 			buf[buf_offset++]=inByte;
 	}
-#endif
 }
 
 // called automatically when serial data is available
@@ -617,11 +622,9 @@ void sendToSlave(JsonObject &message) {
 	while( len>0 )
 	{
 		int send_len = (len>32) ? 32 : len;
-#ifndef NOWIRE
 		Wire.beginTransmission(DISPLAY_I2C_ADDRESS);
 		Wire.write(ptr, send_len);
 		Wire.endTransmission();
-#endif
 		len -= send_len;
 		ptr += send_len;
 	}
@@ -650,7 +653,7 @@ void check_action_groups_enabled(JsonArray& rj)
 	}
 }
 
-void check_button_enabled(JsonArray& rj, unsigned short key, unsigned short button_index) {
+void check_button_enabled(JsonArray& rj, unsigned short key) {
 	auto index=check_for_key( rj, key);
 	if ( index!=KEY_NOT_FOUND) {
 		int val = rj[index+1];
@@ -663,9 +666,9 @@ void check_button_enabled(JsonArray& rj, unsigned short key, unsigned short butt
 void update_console(JsonObject& obj)
 {
 	JsonArray& rj=obj["data"];
-  check_button_enabled( rj, BUTTON_RCS, RCS_BUTTON_INDEX);
-	check_button_enabled( rj, BUTTON_SAS, SAS_BUTTON_INDEX);
-	check_button_enabled( rj, BUTTON_GEAR, GEAR_BUTTON_INDEX);
+  check_button_enabled( rj, BUTTON_RCS);
+	check_button_enabled( rj, BUTTON_SAS);
+	check_button_enabled( rj, BUTTON_GEAR);
 //	check_button_enabled( rj, BUTTON_LIGHTS, LIGHT_BUTTON_INDEX);
 //	check_button_enabled( rj, BUTTON_BREAKS, BRAKES_BUTTON_INDEX);
 	check_action_groups_enabled(rj);
@@ -738,9 +741,11 @@ void read_console_updates(MikeMap *updates)
 
 void loop()
 {
+#ifdef PRINT_DEBUG
 	char buf[100];
 	sprintf( buf, "S: %d", StackCount());
 	Serial.println(buf);
+#endif
 //	while(1) {};
 	reset_serial_buffer();
 	check_serial_port();
@@ -820,3 +825,190 @@ void loop()
 		read_console_updates( &updates );
 	}
 }
+
+
+#else
+/****************************************
+ *
+ * Debug Setup and Loop
+ *
+ ****************************************/
+
+ #include <Arduino.h>
+ #include <stdint.h>
+ /*#include "PCF8574.h"
+ #include "Wire.h"
+ #include "LedControl.h"
+
+LedControl led_top(5, 7, 6, 1);
+LedControl led_bottom(8, 10, 9, 1);
+
+PCF8574 kc1(PCF_BASE_ADDRESS + 0);
+PCF8574 kc2(PCF_BASE_ADDRESS + 1);
+PCF8574 kc3(PCF_BASE_ADDRESS + 2);
+PCF8574 kc4(PCF_BASE_ADDRESS + 3);
+PCF8574 kc5(PCF_BASE_ADDRESS + 4);
+
+PCF8574 lc1(PCF_BASE_ADDRESS + 5);
+PCF8574 lc2(PCF_BASE_ADDRESS + 6);
+
+PCF8574 *key_chips[] = {
+		&kc1, &kc2, &kc3, &kc4, &kc5
+};
+PCF8574 *light_chips[] = {
+		&lc1, &lc2
+};
+*/
+#define LOOP_OVER(X) for( unsigned short index=0; index<X; index++)
+#define NUM_KEY_CHIPS 5
+#define NUM_LIGHT_CHIPS 2
+
+void receiveEvent(int how_many);
+
+#define STACK_CANARY  0xc5
+uint16_t StackCount(void);
+
+extern uint8_t _end;
+extern uint8_t __stack;
+uint16_t freemem=1;
+
+void StackPaint(void) __attribute__ ((naked)) __attribute__ ((section (".init1")));
+void StackPaint(void)
+{
+#if 0
+    uint8_t *p = &_end;
+
+    while(p <= &__stack)
+    {
+        *p = STACK_CANARY;
+        p++;
+    }
+#else
+    __asm volatile ("    ldi r30,lo8(_end)\n"
+                    "    ldi r31,hi8(_end)\n"
+                    "    ldi r24,lo8(0xc5)\n" // STACK_CANARY = 0xc5
+                    "    ldi r25,hi8(__stack)\n"
+                    "    rjmp .cmp\n"
+                    ".loop:\n"
+                    "    st Z+,r24\n"
+                    ".cmp:\n"
+                    "    cpi r30,lo8(__stack)\n"
+                    "    cpc r31,r25\n"
+                    "    brlo .loop\n"
+                    "    breq .loop"::);
+#endif
+}
+
+uint16_t StackCount(void)
+{
+  const uint8_t *p = &_end;
+  uint16_t       c = 0;
+
+  while(*p == 0xc5 && p <= &__stack)
+  {
+    p++;
+    c++;
+  }
+  return c;
+}
+/*
+void setupLC(LedControl &lc, int intensity) {
+	lc.shutdown(0, false); // turn off power saving, enables display
+	lc.setIntensity(0, intensity); // sets brightness (0~15 possible values)
+	lc.clearDisplay(0); // clear screen
+}
+
+void print_led(LedControl *target, long val) {
+
+	int digit = 0;
+	bool negative = (val >= 0) ? false : true;
+	val = abs(val);
+	while (val > 0 && digit < 8)
+	{
+		int last_digit = val % 10;
+		val = val / 10;
+		target->setDigit(0, digit, (byte) last_digit, false);
+		digit++;
+	}
+	if (negative && digit < 8) {
+		target->setChar(0, digit, '-', false);
+		digit++;
+	}
+	while (digit < 8) {
+		target->setChar(0, digit, ' ', false);
+		digit++;
+	}
+
+}
+
+void print_led(LedControl *target, const char *str) {
+	int len = strlen(str);
+	int digit = 0;
+	while (digit < 8 && len > 0) {
+		target->setChar(0, digit, str[len - 1], false);
+		len--;
+		digit++;
+	}
+}
+*/
+void setup() {
+/*	delay(2000);
+	Wire.begin();*/
+	Serial.begin(115200);
+	Serial.println(F("tests startup"));
+//	Wire.onReceive(receiveEvent);
+//	Wire.begin(MAIN_CONTROLLER_I2C_ADDRESS);
+/*	setupLC(led_top, 15);
+	setupLC(led_bottom, 3);
+	LOOP_OVER(NUM_KEY_CHIPS)
+	{
+		PCF8574 *key_chip = key_chips[index];
+		key_chip->write(0xFF);
+	}
+	LOOP_OVER(NUM_LIGHT_CHIPS)
+	{
+		PCF8574 *light_chip = light_chips[index];
+		light_chip->write(0x00);
+	}*/
+	Serial.println(F("setup ende"));
+	return;
+}
+
+// read the data into the buffer,
+// if the current input buffer is not full
+void receiveEvent(int how_many) {
+	return;
+}
+
+void loop()
+{
+	char buf[100];
+	memset( buf, 0, 100);
+	sprintf( buf, "zfree: %d", StackCount());
+	Serial.println(buf);
+	delay(1000);
+	/*
+	static int digit=0;
+	static int up_or_down = 0;
+
+	print_led(&led_top, "        ");
+	print_led(&led_bottom, "        ");
+
+	if( up_or_down== 0 )
+	{
+		led_top.setChar( 0, digit, ' ', true);
+	}
+	else
+	{
+		led_bottom.setChar( 0, digit, ' ', true);
+	}
+
+	digit++;
+	if( digit==8 )
+	{
+		up_or_down = ( up_or_down==0 ) ? 1 : 0;
+		digit = 0;
+	}*/
+}
+
+#endif
