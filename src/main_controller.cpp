@@ -39,13 +39,14 @@ char read_buffer[READ_BUFFER_SIZE];
 unsigned int read_buffer_offset = 0;
 int empty_buffer_size = 0;
 bool have_handshake = false;
+bool display_initialized = false;
 bool stage_enabled = false;
 bool message_complete = false;
 // first time this has to be true so that we can send
 bool display_reply_complete = true;
 
 #define LOOP_OVER(X) for( unsigned short index=0; index<X; index++)
-#define GET_RID_OF( data, index) data.removeAt(index+1); data.removeAt(index);
+#define GET_RID_OF( data, index) data.remove(index+1); data.remove(index);
 #define NO_PIN 9
 #define NO_CHIP 9
 #define NO_KEY -1
@@ -233,8 +234,8 @@ bool getPinForKey( int key, PCF8574 **chip, byte *pin)
 		case BUTTON_THRUST_ZERO: KC1(2)
 		case BUTTON_BREAKS: KC1(3)
 		case BUTTON_STAGE: KC1(4)
-		case BUTTON_SAS: KC1(5)
-		case BUTTON_RCS: KC1(6)
+		case BUTTON_RCS: KC1(5)
+		case BUTTON_SAS: KC1(6)
 		case BUTTON_GEAR: KC1(7)
 		case BUTTON_SAS_MODE: KC2(0)
 		case BUTTON_ACTION_1: KC2(3)
@@ -280,8 +281,8 @@ signed int getKeyForChipPin( int key_chip, int current_bit)
 			case 2: return BUTTON_THRUST_ZERO;
 			case 3: return BUTTON_BREAKS;
 			case 4: return BUTTON_STAGE;
-			case 5: return BUTTON_SAS;
-			case 6: return BUTTON_RCS;
+			case 5: return BUTTON_RCS;
+			case 6: return BUTTON_SAS;
 			case 7: return BUTTON_GEAR;
 		}
 		case 1: switch(current_bit) {
@@ -311,7 +312,6 @@ signed int getKeyForChipPin( int key_chip, int current_bit)
 			case 5: return BUTTON_FUEL;
 			case 6: return BUTTON_REACTION_WHEELS;
 			case 7: return BUTTON_ENGINES_OFF;
-
 		}
 		case 4: switch(current_bit) {
 			case 0: return BUTTON_ENGINES_ON;
@@ -567,6 +567,7 @@ void receiveEvent(int how_many) {
 		if ( inByte == '\n' )
 		{
 			display_reply_complete = true;
+			display_initialized = true;
 			// dump if there is more one the wire
 			return;
 		}
@@ -628,6 +629,7 @@ void sendToSlave(JsonObject &message) {
 		len -= send_len;
 		ptr += send_len;
 	}
+	display_reply_complete = false;
 }
 
 void setLightPin( int key, bool state)
@@ -749,6 +751,15 @@ void loop()
 //	while(1) {};
 	reset_serial_buffer();
 	check_serial_port();
+	if( !display_initialized )
+	{
+		StaticJsonBuffer<READ_BUFFER_SIZE> writeBuffer;
+		JsonObject& root = writeBuffer.createObject();
+		root["start"]=2016;
+		sendToSlave(root);
+		delay(1000);
+		return;
+	}
 	if (message_complete == true) {
 		StaticJsonBuffer<READ_BUFFER_SIZE> readBuffer;
 		JsonObject& rj = readBuffer.parseObject(read_buffer);
