@@ -558,12 +558,11 @@ int serial_read_until(char delimiter, int max_bytes)
 // read the data into the buffer,
 // if the current input buffer is not full
 void receiveEvent(int how_many) {
-	char buf[10];
-	memset( buf, 0, 10);
-	int buf_offset=0;
-	while( Wire.available()>0 )
+	while( how_many>0 )
 	{
+		how_many--;
 		char inByte = Wire.read();
+		// that is the only thing that is supposed to show up
 		if ( inByte == '\n' )
 		{
 			display_reply_complete = true;
@@ -571,8 +570,10 @@ void receiveEvent(int how_many) {
 			// dump if there is more one the wire
 			return;
 		}
-		if( buf_offset<10 )
-			buf[buf_offset++]=inByte;
+		else
+		{
+			dieError(555);
+		}
 	}
 }
 
@@ -609,27 +610,33 @@ void check_serial_port() {
 void dieError(int code) {
 	print_led(&led_top, 33333333);
 	print_led(&led_bottom, code);
+	while(44);
 }
 
 void sendToSlave(JsonObject &message) {
-	int len=message.measureLength();
-	char buf[READ_BUFFER_SIZE];
-	memset(buf, 0, READ_BUFFER_SIZE);
-	message.printTo(buf, READ_BUFFER_SIZE);
+	display_reply_complete = false;
+	char buf[DISPLAY_WIRE_BUFFER_SIZE];
+	memset(buf, 0, DISPLAY_WIRE_BUFFER_SIZE);
+	int len=message.printTo(buf, DISPLAY_WIRE_BUFFER_SIZE);
 	buf[len] = '\n';
 	len++;
+//	print_led(&led_bottom, len);
+	if( len>=DISPLAY_WIRE_BUFFER_SIZE )
+	{
+		dieError(45);
+	}
 	char *ptr=buf;
 	// need to send in 32 byte chunks
+//	print_led(&led_top, len);
 	while( len>0 )
 	{
 		int send_len = (len>32) ? 32 : len;
 		Wire.beginTransmission(DISPLAY_I2C_ADDRESS);
 		Wire.write(ptr, send_len);
-		Wire.endTransmission();
+		Wire.endTransmission(true);
 		len -= send_len;
 		ptr += send_len;
 	}
-	display_reply_complete = false;
 }
 
 void setLightPin( int key, bool state)
@@ -753,9 +760,11 @@ void loop()
 	check_serial_port();
 	if( !display_initialized )
 	{
-		StaticJsonBuffer<READ_BUFFER_SIZE> writeBuffer;
+		static int counter=0;
+		print_led(&led_top, counter++);
+		StaticJsonBuffer<DISPLAY_WIRE_BUFFER_SIZE> writeBuffer;
 		JsonObject& root = writeBuffer.createObject();
-		root["start"]=2016;
+		root["chk"]=1;
 		sendToSlave(root);
 		delay(1000);
 		return;
