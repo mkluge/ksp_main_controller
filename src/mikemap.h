@@ -1,7 +1,9 @@
 #ifndef _HAVE_MIKEMAP_
 #define _HAVE_MIKEMAP_
 
-#define MAX_MAP_LEN 100
+#define MAX_MAP_LEN 30
+
+#include "stdint.h"
 
 class MikeMap {
 
@@ -16,8 +18,8 @@ public:
   void clear();
 
 private:
-  int keys[MAX_MAP_LEN];
-  int values[MAX_MAP_LEN];
+  uint8_t keys[MAX_MAP_LEN];
+  int16_t values[MAX_MAP_LEN];
   int len;
 };
 

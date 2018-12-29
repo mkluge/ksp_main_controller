@@ -11,8 +11,7 @@
 #include "LedControl.h"
 #include "ksp_display_defines.h"
 #include "mikemap.h"
-#include <ArduinoUnit.h>
-
+//#include <ArduinoUnit.h>
 
 /*
  chip(pin)
@@ -42,14 +41,15 @@ bool have_handshake = false;
 bool display_initialized = false;
 bool stage_enabled = false;
 bool message_complete = false;
-// first time this has to be true so that we can send
-bool display_reply_complete = true;
+bool slave_status_requested = false;
 
 #define LOOP_OVER(X) for( unsigned short index=0; index<X; index++)
 #define GET_RID_OF( data, index) data.remove(index+1); data.remove(index);
 #define NO_PIN 9
 #define NO_CHIP 9
 #define NO_KEY -1
+
+#define DISPLAY_UPDATE_SECONDS 3
 
 LedControl led_top(5, 7, 6, 1);
 LedControl led_bottom(8, 10, 9, 1);
@@ -166,63 +166,18 @@ PCF8574 *light_chips[] = {
 //#define BRAKES_BUTTON_INDEX 7
 bool interrupt_seen = false;
 
-void awakeSlave();
 void dieError(int code);
 void reset_serial_buffer();
-// read the data into the buffer,
-// if the current input buffer is not full
-void receiveEvent(int how_many);
 
 /* memorizes pressed buttons until stuff can be sent to master */
 MikeMap updates;
 /* memorizes data that will be send to display */
 MikeMap display_updates;
 
-#define STACK_CANARY  0xc5
-uint16_t StackCount(void);
-
-extern uint8_t _end;
-extern uint8_t __stack;
-uint16_t freemem=1;
-
-void StackPaint(void) __attribute__ ((naked)) __attribute__ ((section (".init1")));
-void StackPaint(void)
-{
-#if 0
-    uint8_t *p = &_end;
-
-    while(p <= &__stack)
-    {
-        *p = STACK_CANARY;
-        p++;
-    }
-#else
-    __asm volatile ("    ldi r30,lo8(_end)\n"
-                    "    ldi r31,hi8(_end)\n"
-                    "    ldi r24,lo8(0xc5)\n" // STACK_CANARY = 0xc5
-                    "    ldi r25,hi8(__stack)\n"
-                    "    rjmp .cmp\n"
-                    ".loop:\n"
-                    "    st Z+,r24\n"
-                    ".cmp:\n"
-                    "    cpi r30,lo8(__stack)\n"
-                    "    cpc r31,r25\n"
-                    "    brlo .loop\n"
-                    "    breq .loop"::);
-#endif
-}
-
-uint16_t StackCount(void)
-{
-  const uint8_t *p = &_end;
-  uint16_t       c = 0;
-
-  while(*p == 0xc5 && p <= &__stack)
-  {
-    p++;
-    c++;
-  }
-  return c;
+int freeRam () {
+  extern int __heap_start, *__brkval;
+  int v;
+  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval);
 }
 
 bool getPinForKey( int key, PCF8574 **chip, byte *pin)
@@ -365,8 +320,8 @@ void setupLC(LedControl &lc, int intensity) {
 	lc.clearDisplay(0); // clear screen
 }
 
-void print_led(LedControl *target, long val) {
-
+void print_led(LedControl *target, long val)
+{
 	int digit = 0;
 	bool negative = (val >= 0) ? false : true;
 	val = abs(val);
@@ -385,7 +340,6 @@ void print_led(LedControl *target, long val) {
 		target->setChar(0, digit, ' ', false);
 		digit++;
 	}
-
 }
 
 void print_led(LedControl *target, const char *str) {
@@ -438,6 +392,7 @@ void testAllButtons(MikeMap *updates) {
 }
 
 void setup() {
+
 	delay(1000);
 	Serial.begin(115200);
 #ifdef PRINT_DEBUG
@@ -445,8 +400,7 @@ void setup() {
 #endif
 	updates.clear();
 	display_updates.clear();
-	Wire.onReceive(receiveEvent);
-	Wire.begin(MAIN_CONTROLLER_I2C_ADDRESS);
+	Wire.begin();
 #ifdef PRINT_DEBUG
 	Serial.println(F("setup ende"));
 #endif
@@ -557,25 +511,6 @@ int serial_read_until(char delimiter, int max_bytes)
 
 // read the data into the buffer,
 // if the current input buffer is not full
-void receiveEvent(int how_many) {
-	while( how_many>0 )
-	{
-		how_many--;
-		char inByte = Wire.read();
-		// that is the only thing that is supposed to show up
-		if ( inByte == '\n' )
-		{
-			display_reply_complete = true;
-			display_initialized = true;
-			// dump if there is more one the wire
-			return;
-		}
-		else
-		{
-			dieError(555);
-		}
-	}
-}
 
 // called automatically when serial data is available
 void check_serial_port() {
@@ -614,9 +549,8 @@ void dieError(int code) {
 }
 
 void sendToSlave(JsonObject &message) {
-	display_reply_complete = false;
+	Wire.clearWriteError();
 	char buf[DISPLAY_WIRE_BUFFER_SIZE];
-	memset(buf, 0, DISPLAY_WIRE_BUFFER_SIZE);
 	int len=message.printTo(buf, DISPLAY_WIRE_BUFFER_SIZE);
 	buf[len] = '\n';
 	len++;
@@ -674,6 +608,8 @@ void check_button_enabled(JsonArray& rj, unsigned short key) {
 
 void update_console(JsonObject& obj)
 {
+	static unsigned long last_display_update = 0;
+
 	JsonArray& rj=obj["data"];
   check_button_enabled( rj, BUTTON_RCS);
 	check_button_enabled( rj, BUTTON_SAS);
@@ -694,9 +630,22 @@ void update_console(JsonObject& obj)
 	}
 
 	// wenn noch lang genug -> display controller
-	if (rj.size() > 0 || display_updates.get_len()>0) {
+	//	char pbuf[9];
+	//	sprintf( pbuf, "%d-%d-%d", rj.size(), display_updates.get_len(), (display_reply_complete==true) ? 1 : 0);
+	//	sprintf( pbuf, "%d", freeRam());
+	//	pbuf[8]=0;
+	//	print_led( &led_top, pbuf);
+	unsigned long elapsed_millies = millis() - last_display_update;
+
+
+	if( (rj.size() > 0 || display_updates.get_len()>0) &&
+      elapsed_millies > (DISPLAY_UPDATE_SECONDS*1000)) {
 		// can we send or do we have to store?
-		if( display_reply_complete==true )
+		Wire.requestFrom( DISPLAY_I2C_ADDRESS, 1);
+		if( Wire.available()!=1 )
+			dieError(666);
+		byte can_send = Wire.read();
+		if( can_send )
 		{
 			// OK, send
 			for( int i=0; i<display_updates.get_len(); i++)
@@ -710,6 +659,7 @@ void update_console(JsonObject& obj)
 			obj["data"]=rj;
 			display_updates.clear();
 		  sendToSlave(obj);
+			last_display_update = millis();
 		} else {
 			// no, just store stuff
 			for( unsigned index=0; index<rj.size(); index+=2)
@@ -750,30 +700,11 @@ void read_console_updates(MikeMap *updates)
 
 void loop()
 {
-#ifdef PRINT_DEBUG
-	char buf[100];
-	sprintf( buf, "S: %d", StackCount());
-	Serial.println(buf);
-#endif
-//	while(1) {};
 	reset_serial_buffer();
 	check_serial_port();
-	if( !display_initialized )
-	{
-		static int counter=0;
-		print_led(&led_top, counter++);
-		StaticJsonBuffer<DISPLAY_WIRE_BUFFER_SIZE> writeBuffer;
-		JsonObject& root = writeBuffer.createObject();
-		root["chk"]=1;
-		sendToSlave(root);
-		delay(1000);
-		return;
-	}
 	if (message_complete == true) {
 		StaticJsonBuffer<READ_BUFFER_SIZE> readBuffer;
 		JsonObject& rj = readBuffer.parseObject(read_buffer);
-//		freemem = StackCount();
-
 		if (!rj.success()) {
 			dieError(2);
 		} else {
@@ -879,18 +810,59 @@ PCF8574 *light_chips[] = {
 		&lc1, &lc2
 };
 */
+
+#include "LedControl.h"
+LedControl led_top(5, 7, 6, 1);
+
 #define LOOP_OVER(X) for( unsigned short index=0; index<X; index++)
 #define NUM_KEY_CHIPS 5
 #define NUM_LIGHT_CHIPS 2
 
 void receiveEvent(int how_many);
 
+void setupLC(LedControl &lc, int intensity) {
+	lc.shutdown(0, false); // turn off power saving, enables display
+	lc.setIntensity(0, intensity); // sets brightness (0~15 possible values)
+	lc.clearDisplay(0); // clear screen
+}
+
+void print_led(LedControl *target, long val)
+{
+	int digit = 0;
+	bool negative = (val >= 0) ? false : true;
+	val = abs(val);
+	while (val > 0 && digit < 8)
+	{
+		int last_digit = val % 10;
+		val = val / 10;
+		target->setDigit(0, digit, (byte) last_digit, false);
+		digit++;
+	}
+	if (negative && digit < 8) {
+		target->setChar(0, digit, '-', false);
+		digit++;
+	}
+	while (digit < 8) {
+		target->setChar(0, digit, ' ', false);
+		digit++;
+	}
+}
+
+void print_led(LedControl *target, const char *str) {
+	int len = strlen(str);
+	int digit = 0;
+	while (digit < 8 && len > 0) {
+		target->setChar(0, digit, str[len - 1], false);
+		len--;
+		digit++;
+	}
+}
+
 #define STACK_CANARY  0xc5
 uint16_t StackCount(void);
 
 extern uint8_t _end;
 extern uint8_t __stack;
-uint16_t freemem=1;
 
 void StackPaint(void) __attribute__ ((naked)) __attribute__ ((section (".init1")));
 void StackPaint(void)
@@ -931,47 +903,34 @@ uint16_t StackCount(void)
   }
   return c;
 }
-/*
-void setupLC(LedControl &lc, int intensity) {
-	lc.shutdown(0, false); // turn off power saving, enables display
-	lc.setIntensity(0, intensity); // sets brightness (0~15 possible values)
-	lc.clearDisplay(0); // clear screen
+
+
+/* This function places the current value of the heap and stack pointers in the
+ * variables. You can call it from any place in your code and save the data for
+ * outputting or displaying later. This allows you to check at different parts of
+ * your program flow.
+ * The stack pointer starts at the top of RAM and grows downwards. The heap pointer
+ * starts just above the static variables etc. and grows upwards. SP should always
+ * be larger than HP or you'll be in big trouble! The smaller the gap, the more
+ * careful you need to be. Julian Gall 6-Feb-2009.
+ */
+uint8_t * heapptr, * stackptr;
+void check_mem() {
+  stackptr = (uint8_t *)malloc(4);          // use stackptr temporarily
+  heapptr = stackptr;                     // save value of heap pointer
+  free(stackptr);      // free up the memory again (sets stackptr to 0)
+  stackptr =  (uint8_t *)(SP);           // save value of stack pointer
 }
 
-void print_led(LedControl *target, long val) {
-
-	int digit = 0;
-	bool negative = (val >= 0) ? false : true;
-	val = abs(val);
-	while (val > 0 && digit < 8)
-	{
-		int last_digit = val % 10;
-		val = val / 10;
-		target->setDigit(0, digit, (byte) last_digit, false);
-		digit++;
-	}
-	if (negative && digit < 8) {
-		target->setChar(0, digit, '-', false);
-		digit++;
-	}
-	while (digit < 8) {
-		target->setChar(0, digit, ' ', false);
-		digit++;
-	}
-
+int freeRam () {
+  extern int __heap_start, *__brkval;
+  int v;
+  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval);
 }
 
-void print_led(LedControl *target, const char *str) {
-	int len = strlen(str);
-	int digit = 0;
-	while (digit < 8 && len > 0) {
-		target->setChar(0, digit, str[len - 1], false);
-		len--;
-		digit++;
-	}
-}
-*/
 void setup() {
+	setupLC(led_top, 15);
+
 /*	delay(2000);
 	Wire.begin();*/
 	Serial.begin(115200);
@@ -1002,11 +961,18 @@ void receiveEvent(int how_many) {
 
 void loop()
 {
+	check_mem();
+	long diff;
+	if( stackptr>heapptr )
+		diff = ((long)stackptr)-((long)heapptr);
+	else
+	  diff=1;
 	char buf[100];
 	memset( buf, 0, 100);
-	sprintf( buf, "zfree: %d", StackCount());
-	Serial.println(buf);
-	delay(1000);
+	//	sprintf( buf, "%d", StackCount());
+	sprintf( buf, "%d", freeRam());
+	print_led( &led_top, buf);
+	while(1);
 	/*
 	static int digit=0;
 	static int up_or_down = 0;
