@@ -9,8 +9,8 @@ test(pcf8574)
 	test_chip.selfTest();
 }
 
-PCF8574::PCF8574(int address) {
-	this->chip_hw_address = address;
+PCF8574::PCF8574(uint8_t address) {
+	chip_hw_address = address;
 	last_data = 0;
 	last_debounced_data = 0;
 	last_error = 0;

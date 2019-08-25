@@ -8,7 +8,7 @@
 
 class PCF8574 {
 public:
-	PCF8574(int address);
+	PCF8574(uint8_t address);
 
 	// updates the internal state, including debouncing the input
 	// returns a byte with all bits set to 1 that changed
@@ -36,7 +36,7 @@ private:
 	// the bits that are 0 are used as inputs
 	byte input_mask;
 	// the HW address on the I2C bus
-	int chip_hw_address;
+	uint8_t chip_hw_address;
 	// the last 8 bytes read
 	byte last_data;
 	// the last 8 bytes read, debounced
