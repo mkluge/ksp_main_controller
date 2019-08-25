@@ -68,27 +68,33 @@ int action_group_buttons[10] = {
 	BUTTON_ACTION_9, BUTTON_ACTION_10
 };
 
-AnalogInput analog_inputs[] = {
-	AnalogInput( KSP_INPUT_YAW, A5, true),
-	AnalogInput( KSP_INPUT_PITCH, A6, true),
-	AnalogInput( KSP_INPUT_ROLL, A7, true),
-	AnalogInput( KSP_INPUT_XTRANS, A2, true),
-	AnalogInput( KSP_INPUT_YTRANS, A3, true),
-	AnalogInput( KSP_INPUT_ZTRANS, A1, true),
-	AnalogInput( KSP_INPUT_THRUST, A0, false)
+AnalogInput ai1( KSP_INPUT_YAW, A5, true);
+AnalogInput ai2( KSP_INPUT_PITCH, A6, true);
+AnalogInput ai3( KSP_INPUT_ROLL, A7, true);
+AnalogInput ai4( KSP_INPUT_XTRANS, A2, true);
+AnalogInput ai5( KSP_INPUT_YTRANS, A3, true);
+AnalogInput ai6( KSP_INPUT_ZTRANS, A1, true);
+AnalogInput ai7( KSP_INPUT_THRUST, A0, false);
+
+AnalogInput *analog_inputs[NUM_ANALOG_INPUTS] = {
+	&ai1, &ai2, &ai3, &ai4, &ai5, &ai6, &ai7
 };
 
-PCF8574 key_chips[] = {
-	PCF8574(PCF_BASE_ADDRESS + 0),
-	PCF8574(PCF_BASE_ADDRESS + 1),
-	PCF8574(PCF_BASE_ADDRESS + 2),
-	PCF8574(PCF_BASE_ADDRESS + 3),
-	PCF8574(PCF_BASE_ADDRESS + 4)
+PCF8574 kc1(PCF_BASE_ADDRESS + 0);
+PCF8574 kc2(PCF_BASE_ADDRESS + 1);
+PCF8574 kc3(PCF_BASE_ADDRESS + 2);
+PCF8574 kc4(PCF_BASE_ADDRESS + 3);
+PCF8574 kc5(PCF_BASE_ADDRESS + 4);
+
+PCF8574 *key_chips[NUM_KEY_CHIPS] = {
+	&kc1, &kc2, &kc3, &kc4, &kc5
 };
 
-PCF8574 light_chips[] = {
-	PCF8574(PCF_BASE_ADDRESS + 5),
-	PCF8574(PCF_BASE_ADDRESS + 6)
+PCF8574 lc1(PCF_BASE_ADDRESS + 5);
+PCF8574 lc2(PCF_BASE_ADDRESS + 6);
+
+PCF8574 *light_chips[NUM_LIGHT_CHIPS] = {
+	&lc1, &lc2
 };
 
 #define KC1(kpin) *chip=0; *pin=kpin; return true;
@@ -110,7 +116,7 @@ bool interrupt_seen = false;
 
 void dieError(int code);
 void reset_serial_buffer();
-void sendToSlave(const JsonDocument& message);
+void sendToSlave(const JsonDocument &message);
 
 /* memorizes pressed buttons until stuff can be sent to master */
 MikeMap updates;
@@ -244,7 +250,7 @@ bool getLightFromKey( int key, uint8_t *chip, uint8_t *pin)
 	return false;
 }
 
-signed int check_for_key( JsonArray data, short key)
+signed int check_for_key( const JsonArray& data, short key)
 {
 	for( size_t index=0; index<data.size(); index+=2)
 	{
@@ -304,7 +310,7 @@ void testAllButtons(MikeMap *updates) {
 	for( auto pcf8754 : key_chips )
 	{
 		byte changed_bits=0x00;
-		if ((changed_bits = pcf8754.updateState()) != 0x00) {
+		if ((changed_bits = pcf8754->updateState()) != 0x00) {
 			// test all bits and update the json for each bit set
 			int current_bit = 0;
 			while (changed_bits != 0) {
@@ -314,10 +320,10 @@ void testAllButtons(MikeMap *updates) {
 					{
 						// low active inputs
 						updates->set( key,
-												 (pcf8754.testPin(current_bit) == false) ? 1 : 0);
+												 (pcf8754->testPin(current_bit) == false) ? 1 : 0);
 					  // remember buttons that trigger the display controller directly
 						if( key==BUTTON_NEXT_LEFT_LCD_MODE &&
-					      pcf8754.testPin(current_bit) == false) // low active
+					      pcf8754->testPin(current_bit) == false) // low active
 						{
 							display_updates.set( BUTTON_NEXT_LEFT_LCD_MODE, 1);
 						}
@@ -353,31 +359,31 @@ void setup() {
 	print_led(led_bottom, "        ");
 	for( auto i : analog_inputs)
 	{
-		i.calibrate();
+		i->calibrate();
 	}
 
 	// to act as input, all outputs have to be on HIGH
 	for( auto kc : key_chips)
 	{
-		kc.write(0xFF);
+		kc->write(0xFF);
 	}
 	for( auto lc : light_chips)
 	{
-		lc.setInputMask( 0x00 );
-		lc.write(0xff);
+		lc->setInputMask( 0x00 );
+		lc->write(0xff);
 	}
 
 	delay(1000);
 	print_led(led_top, "        ");
 	print_led(led_bottom, "        ");
 	// first 4 chips have all pins as inputs
-	key_chips[0].setInputMask( 0xff );
-	key_chips[1].setInputMask( 0xff );
-	key_chips[2].setInputMask( 0xff );
-	key_chips[3].setInputMask( 0xff );
+	key_chips[0]->setInputMask( 0xff );
+	key_chips[1]->setInputMask( 0xff );
+	key_chips[2]->setInputMask( 0xff );
+	key_chips[3]->setInputMask( 0xff );
 	for( auto lc : light_chips)
 	{
-		lc.write(0x00);
+		lc->write(0x00);
 	}
 
 	// set input mask for chip 4, all inputs except
@@ -385,12 +391,12 @@ void setup() {
 	byte kc5_mask = 0xff;
 	kc5_mask &= ~(1<<4);
 	kc5_mask &= ~(1<<5);
-	key_chips[4].setInputMask( kc5_mask );
+	key_chips[4]->setInputMask( kc5_mask );
 	// turn off the two leds
 	// LED rechts
-	key_chips[4].setPin(4, 0);
+	key_chips[4]->setPin(4, 0);
 	// LED links
-	key_chips[4].setPin(5, 0);
+	key_chips[4]->setPin(5, 0);
 
 	// i2c Bus input??
 	pinMode(19, INPUT);
@@ -514,10 +520,10 @@ void setLightPin( int key, bool state)
 	uint8_t chip;
 	uint8_t pin;
 	getLightFromKey( key, &chip, &pin);
-	light_chips[chip].setPin( pin, state);
+	light_chips[chip]->setPin( pin, state);
 }
 
-void check_action_groups_enabled(JsonArray data)
+void check_action_groups_enabled(const JsonArray& data)
 {
 	auto index = check_for_key( data, INFO_ACTION_GROUPS);
 	if ( index!=KEY_NOT_FOUND ) {
@@ -533,18 +539,24 @@ void check_action_groups_enabled(JsonArray data)
 	}
 }
 
-void check_button_enabled(JsonArray data, unsigned short key) {
+void check_button_enabled(const JsonArray& data, unsigned short key) {
 	auto index=check_for_key( data, key);
 	if ( index!=KEY_NOT_FOUND) {
-		int val = data[index+1];
-		bool state = (val == 1) ? true : false;
+		bool state = data[index+1]==1 ? true : false;
+/*		if( key==BUTTON_RCS )
+		{
+			print_led( led_bottom, state==true ? "11" : "99");
+			PCF8574 test(PCF_BASE_ADDRESS + 5);
+			test.setInputMask(0x00);
+			test.setPin(1, state);
+		}*/
 		setLightPin( key, state);
 		data.remove(index+1);
 		data.remove(index);
 	}
 }
 
-void update_console(JsonArray data)
+void update_console(const JsonArray& data)
 {
 	static unsigned long last_display_update = 0;
 
@@ -558,27 +570,20 @@ void update_console(JsonArray data)
 	auto index = check_for_key( data, INFO_SPEED);
 	if ( index != KEY_NOT_FOUND ) {
 	  print_led( led_top, (long) data[index+1]);
+		data.remove(index+1);
+		data.remove(index);
 	}
-	print_led( led_bottom, 4);
+
 	index = check_for_key( data, INFO_HEIGHT);
 	if ( index != KEY_NOT_FOUND ) {
 	  print_led( led_bottom, (long) data[index+1]);
+		data.remove(index+1);
+		data.remove(index);
 	}
-	print_led( led_bottom, 5);
 
-	// wenn noch lang genug -> display controller
-	//	char pbuf[9];
-	//	sprintf( pbuf, "%d-%d-%d", rj.size(), display_updates.get_len(), (display_reply_complete==true) ? 1 : 0);
-	//	sprintf( pbuf, "%d", freeRam());
-	//	pbuf[8]=0;
-	//	print_led( &led_top, pbuf);
-//	von kaputt, muss dann wieder ein : unsigned long elapsed_millies = millis() - last_display_update;
-//  print_led( &led_top, elapsed_millies);
+	unsigned long elapsed_millies = millis() - last_display_update;
 
-/*
-kaputt!!
-
-	if( (rj.size() > 0 || display_updates.get_len()>0) &&
+	if( (data.size() > 0 || display_updates.get_len()>0) &&
       elapsed_millies>DISPLAY_UPDATE_MILLISECONDS) {
 		// can we send or do we have to store?
 		byte can_send = 1;
@@ -590,29 +595,29 @@ kaputt!!
 				int k;
 				int v;
 				display_updates.get_at( i, &k, &v);
-				rj.add(k);
-				rj.add(v);
+				data.add(k);
+				data.add(v);
 			}
-			obj["data"]=rj;
 			display_updates.clear();
-		  sendToSlave(obj);
+			StaticJsonDocument<DISPLAY_WIRE_BUFFER_SIZE> root;
+			root["data"]=data;
+		  sendToSlave(root);
 			last_display_update = millis();
 		} else {
 			// no, just store stuff
-			for( unsigned index=0; index<rj.size(); index+=2)
+			for( unsigned index=0; index<data.size(); index+=2)
 			{
-				display_updates.set( rj[index], rj[index+1]);
+				display_updates.set( data[index], data[index+1]);
 			}
 		}
 	}
-	*/
 }
 
 void read_console_updates(MikeMap *updates)
 {
 	for( auto ai : analog_inputs)
 	{
-		ai.readInto( updates, false);
+		ai->readInto( updates, false);
 	}
 	testAllButtons(updates);
 	// there are two special buttons :)
@@ -620,13 +625,13 @@ void read_console_updates(MikeMap *updates)
 	if ( updates->has(BUTTON_SWITCH_RIGHT))
 	{
 		bool value = (updates->get(BUTTON_SWITCH_RIGHT)==1) ? true : false;
-		key_chips[4].setPin(4, value);
-		light_chips[0].setPin(0, value);
+		key_chips[4]->setPin(4, value);
+		light_chips[0]->setPin(0, value);
 		stage_enabled = value;
 	}
 	if ( updates->has(BUTTON_SWITCH_LEFT))
 	{
-		key_chips[4].setPin( 5, (updates->get(BUTTON_SWITCH_LEFT)) ? true : false);
+		key_chips[4]->setPin( 5, (updates->get(BUTTON_SWITCH_LEFT)) ? true : false);
 	}
 	// let "stage" only pass if staging is enabled
 	if ( updates->get(BUTTON_STAGE) && stage_enabled==false)
@@ -651,8 +656,6 @@ void loop()
 			}
 			if( rj["cmd"] == CMD_GET_UPDATES )
 			{
-				print_led( led_top, " - - - -");
-				print_led( led_bottom, "      - ");
 				read_console_updates( &updates );
 				StaticJsonDocument<READ_BUFFER_SIZE> root;
 				JsonArray data = root.createNestedArray("data");
@@ -672,14 +675,12 @@ void loop()
 			}
 			else if( rj["cmd"]== CMD_UPDATE_CONSOLE )
 			{
-				print_led( led_top, "   - - -");
-				print_led( led_bottom, "      - ");
 				update_console( rj["data"] );
 			}
 			else if( rj["cmd"]== CMD_INIT )
 			{
-				print_led( led_top, "     - -");
-				print_led( led_bottom, "      - ");
+				print_led(    led_top, "- _     ");
+				print_led( led_bottom, "    - _ ");
 				have_handshake = true;
 			}
 		}
