@@ -58,7 +58,7 @@
 #define INFO_PERCENTAGE_RCS 113
 #define INFO_PERCENTAGE_BATTERY 114
 #define INFO_PERCENTAGE_OXYGEN 115
-#define BUTTON_NEXT_LEFT_LCD_MODE 36 // no extra button, currently the TEST button
+#define BUTTON_NEXT_LEFT_TFT_MODE 36 // no extra button, currently the TEST button
 
 #define CMD_GET_UPDATES 109
 #define CMD_UPDATE_CONSOLE 110

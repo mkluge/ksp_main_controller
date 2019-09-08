@@ -1,7 +1,7 @@
 #ifndef _HAVE_MIKEMAP_
 #define _HAVE_MIKEMAP_
 
-#define MAX_MAP_LEN 30
+#define MAX_MAP_LEN 50
 
 #include "stdint.h"
 

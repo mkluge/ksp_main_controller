@@ -1,4 +1,3 @@
-#undef TEST
 #undef PRINT_DEBUG
 
 #ifndef TEST
@@ -53,7 +52,7 @@ bool message_complete = false;
 #define DISPLAY_UPDATE_MILLISECONDS 10000
 
 LedControl led_top(5, 7, 6, 1);
-LedControl led_bottom(8, 10, 9, 1);
+LedControl led_bottom(2, 4, 3, 1);
 
 // double check used pins
 // 5: 0 1 2 3 4 5 6 7 - FULL
@@ -322,10 +321,10 @@ void testAllButtons(MikeMap *updates) {
 						updates->set( key,
 												 (pcf8754->testPin(current_bit) == false) ? 1 : 0);
 					  // remember buttons that trigger the display controller directly
-						if( key==BUTTON_NEXT_LEFT_LCD_MODE &&
+						if( key==BUTTON_NEXT_LEFT_TFT_MODE &&
 					      pcf8754->testPin(current_bit) == false) // low active
 						{
-							display_updates.set( BUTTON_NEXT_LEFT_LCD_MODE, 1);
+							display_updates.set( BUTTON_NEXT_LEFT_TFT_MODE, 1);
 						}
 					}
 					else
@@ -408,12 +407,12 @@ void setup() {
 	root["chk"]=1;
 	sendToSlave(root);
 
-	Serial.begin(115200);
-	empty_buffer_size = Serial.availableForWrite();
+	Serial2.begin(115200);
+	empty_buffer_size = Serial2.availableForWrite();
 	print_led( led_bottom, "- - -");
 
 #ifdef PRINT_DEBUG
-	Serial.println(F("setup ende"));
+	Serial2.println(F("setup ende"));
 #endif
 }
 
@@ -427,12 +426,12 @@ int serial_read_until(char delimiter, int max_bytes)
 {
 	int bytes_read=0;
 	while (1) {
-		if( !Serial.available() )
+		if( !Serial2.available() )
 		{
 			continue;
 		}
 //		print_led(&led_top, bytes_read);
-		char inByte = Serial.read();
+		char inByte = Serial2.read();
 		bytes_read++;
 		if (read_buffer_offset < (READ_BUFFER_SIZE - 1)) {
 			read_buffer[read_buffer_offset] = (char) inByte;
@@ -462,7 +461,7 @@ void check_serial_port() {
 		return;
 	}
 	// nothing is waiting, so just leave ...
-	if( !Serial.available() )
+	if( !Serial2.available() )
 	{
 		return;
 	}
@@ -475,8 +474,8 @@ void check_serial_port() {
 	// second: read so many bytes in 32 byte chunks
 	while (bytes_to_read>0) {
 		int bytes_read = serial_read_until( '\n', 32);
-		Serial.print(F("OK"));
-		Serial.flush();
+		Serial2.print(F("OK"));
+		Serial2.flush();
 		bytes_to_read -= bytes_read;
 		if ( message_complete == true )
 		{
@@ -534,8 +533,8 @@ void check_action_groups_enabled(const JsonArray& data)
 			setLightPin( action_group_buttons[bit], status&mask);
 			mask=mask*2;
 		}
-		data.remove(index+1);
-		data.remove(index);
+//		data.remove(index+1);
+//		data.remove(index);
 	}
 }
 
@@ -551,14 +550,14 @@ void check_button_enabled(const JsonArray& data, unsigned short key) {
 			test.setPin(1, state);
 		}*/
 		setLightPin( key, state);
-		data.remove(index+1);
-		data.remove(index);
+//		data.remove(index+1);
+//		data.remove(index);
 	}
 }
 
 void update_console(const JsonArray& data)
 {
-	static unsigned long last_display_update = 0;
+//	static unsigned long last_display_update = 0;
 
   check_button_enabled( data, BUTTON_RCS);
 	check_button_enabled( data, BUTTON_SAS);
@@ -570,17 +569,18 @@ void update_console(const JsonArray& data)
 	auto index = check_for_key( data, INFO_SPEED);
 	if ( index != KEY_NOT_FOUND ) {
 	  print_led( led_top, (long) data[index+1]);
-		data.remove(index+1);
-		data.remove(index);
+//		data.remove(index+1);
+//		data.remove(index);
 	}
 
 	index = check_for_key( data, INFO_HEIGHT);
 	if ( index != KEY_NOT_FOUND ) {
 	  print_led( led_bottom, (long) data[index+1]);
-		data.remove(index+1);
-		data.remove(index);
+//		data.remove(index+1);
+//		data.remove(index);
 	}
 
+/* broken
 	unsigned long elapsed_millies = millis() - last_display_update;
 
 	if( (data.size() > 0 || display_updates.get_len()>0) &&
@@ -611,6 +611,7 @@ void update_console(const JsonArray& data)
 			}
 		}
 	}
+	*/
 }
 
 void read_console_updates(MikeMap *updates)
@@ -670,8 +671,8 @@ void loop()
 				}
 				updates.clear();
 				serializeJson( root, Serial);
-				Serial.print('\n');
-				Serial.flush();
+				Serial2.print('\n');
+				Serial2.flush();
 			}
 			else if( rj["cmd"]== CMD_UPDATE_CONSOLE )
 			{
@@ -679,8 +680,8 @@ void loop()
 			}
 			else if( rj["cmd"]== CMD_INIT )
 			{
-				print_led(    led_top, "- _     ");
-				print_led( led_bottom, "    - _ ");
+				print_led(    led_top, "      - ");
+				print_led( led_bottom, "      - ");
 				have_handshake = true;
 			}
 		}
