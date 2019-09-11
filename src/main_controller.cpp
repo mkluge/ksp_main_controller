@@ -1,6 +1,5 @@
 #undef PRINT_DEBUG
 
-#ifndef TEST
 #include "Arduino.h"
 #include "ArduinoJson.h"
 #include "AnalogInput.h"
@@ -48,16 +47,14 @@ bool message_complete = false;
 #define NO_CHIP 9
 #define NO_KEY -1
 
-#define DISPLAY_UPDATE_MILLISECONDS 10000
-
 LedControl led_top(5, 7, 6, 1);
 LedControl led_bottom(2, 4, 3, 1);
 
 // double check used pins
 // 5: 0 1 2 3 4 5 6 7 - FULL
 // 4: 0 1 2 3 4 5 6 7 - FULL
-// 3: 0 1 2 3 4 6 7
-// 2: 3 4 5 6 7
+// 3: 0 1 2 3 4   6 7
+// 2:       3 4 5 6 7
 // 1: 0 1 2 3 4 5 6 7 - FULL
 
 int action_group_buttons[10] = {
@@ -526,6 +523,8 @@ void setup()
 	delay(100);
 
 	// send init to display
+	// this should also give us the initial 
+	// reply from the display controller to get the thing going
 	StaticJsonDocument<DISPLAY_WIRE_BUFFER_SIZE> root;
 	root["chk"] = 1;
 	sendToSlave(root);
@@ -624,6 +623,8 @@ void dieError(int code)
 		;
 }
 
+// warning: this thing just sends, it does not care about
+// the protocoll (the 77 coming back as "ready to receive")
 void sendToSlave(const JsonDocument &message)
 {
 	char buf[DISPLAY_WIRE_BUFFER_SIZE];
@@ -647,6 +648,8 @@ void sendToSlave(const JsonDocument &message)
 		len -= send_len;
 		ptr += send_len;
 	}
+	// request the reply
+	Wire.requestFrom( DISPLAY_I2C_ADDRESS, 1);
 }
 
 void setLightPin(int key, bool state)
@@ -720,38 +723,38 @@ void update_console(const JsonArray &data)
 		//		data.remove(index);
 	}
 
-	/* broken
-	unsigned long elapsed_millies = millis() - last_display_update;
-
-	if( (data.size() > 0 || display_updates.get_len()>0) &&
-      elapsed_millies>DISPLAY_UPDATE_MILLISECONDS) {
-		// can we send or do we have to store?
-		byte can_send = 1;
-		if( can_send>0 )
+	// put stuff into display_updates
+	for( auto key: display_keys)
+	{
+		index = check_for_key( data, key);
+		if ( index != KEY_NOT_FOUND )
 		{
-			// OK, send
-			for( int i=0; i<display_updates.get_len(); i++)
-			{
-				int k;
-				int v;
-				display_updates.get_at( i, &k, &v);
-				data.add(k);
-				data.add(v);
-			}
-			display_updates.clear();
-			StaticJsonDocument<DISPLAY_WIRE_BUFFER_SIZE> root;
-			root["data"]=data;
-		  sendToSlave(root);
-			last_display_update = millis();
-		} else {
-			// no, just store stuff
-			for( unsigned index=0; index<data.size(); index+=2)
-			{
-				display_updates.set( data[index], data[index+1]);
-			}
+			display_updates.set( data[index], data[index+1]);
 		}
 	}
-	*/
+
+	// send stuff to slave, if the slave is ok with this
+	// it is OK, if we have a byte on the wire waiting
+	if( Wire.available()>0 && display_updates.get_len()>0) 
+	{
+		byte b=Wire.read();
+		if (b!=77) {
+			dieError(88);
+		}		
+		// OK, send
+		for( int i=0; i<display_updates.get_len(); i++)
+		{
+			int k;
+			int v;
+			display_updates.get_at( i, &k, &v);
+			data.add(k);
+			data.add(v);
+		}
+		display_updates.clear();
+		StaticJsonDocument<DISPLAY_WIRE_BUFFER_SIZE> root;
+		root["data"]=data;
+		sendToSlave(root);
+	} 
 }
 
 void read_console_updates(MikeMap *updates)
@@ -862,12 +865,3 @@ void loop()
 		read_console_updates(&updates);
 	}
 }
-
-#else
-/****************************************
- *
- * Debug Setup and Loop
- *
- ****************************************/
-
-#endif
