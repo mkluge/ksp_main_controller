@@ -1,5 +1,10 @@
 .pioenvs
 .clang_complete
 .gcc-flags.json
+/Release/*
+/Release/
+.pio/
+.vscode/
+.ino.cpp
+.settings/
 .piolibdeps
-.travis.yml
