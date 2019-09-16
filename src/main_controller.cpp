@@ -131,7 +131,7 @@ void reset_serial_buffer();
 void sendToSlave(const JsonDocument &message);
 
 /* memorizes pressed buttons until stuff can be sent to master */
-MikeMap updates;
+MikeMap key_updates;
 /* memorizes data that will be send to display */
 MikeMap display_updates;
 
@@ -467,7 +467,7 @@ void setup()
 #ifdef PRINT_DEBUG
 	Test::run();
 #endif
-	updates.clear();
+	key_updates.clear();
 	display_updates.clear();
 	setupLC(led_top, 15);
 	setupLC(led_bottom, 3);
@@ -523,9 +523,9 @@ void setup()
 	delay(100);
 
 	// send init to display
-	// this should also give us the initial 
+	// this should also give us the initial
 	// reply from the display controller to get the thing going
-	StaticJsonDocument<DISPLAY_WIRE_BUFFER_SIZE> root;
+	DynamicJsonDocument root(DISPLAY_WIRE_BUFFER_SIZE);
 	root["chk"] = 1;
 	sendToSlave(root);
 
@@ -735,26 +735,26 @@ void update_console(const JsonArray &data)
 
 	// send stuff to slave, if the slave is ok with this
 	// it is OK, if we have a byte on the wire waiting
-	if( Wire.available()>0 && display_updates.get_len()>0) 
+	if( Wire.available()>0 && display_updates.get_len()>0)
 	{
 		byte b=Wire.read();
 		if (b!=77) {
 			dieError(88);
-		}		
+		}
 		// OK, send
-		for( int i=0; i<display_updates.get_len(); i++)
+		for( unsigned int i=0; i<display_updates.get_len(); i++)
 		{
-			int k;
-			int v;
+			MAP_KEY_TYPE k;
+			MAP_VALUE_TYPE v;
 			display_updates.get_at( i, &k, &v);
 			data.add(k);
 			data.add(v);
 		}
 		display_updates.clear();
-		StaticJsonDocument<DISPLAY_WIRE_BUFFER_SIZE> root;
+		DynamicJsonDocument root(DISPLAY_WIRE_BUFFER_SIZE);
 		root["data"]=data;
 		sendToSlave(root);
-	} 
+	}
 }
 
 void read_console_updates(MikeMap *updates)
@@ -790,7 +790,7 @@ void loop()
 	check_serial_port();
 	if (message_complete == true)
 	{
-		StaticJsonDocument<READ_BUFFER_SIZE> rj;
+		DynamicJsonDocument rj(READ_BUFFER_SIZE);
 		DeserializationError error = deserializeJson(rj, read_buffer);
 		if (error)
 		{
@@ -804,20 +804,20 @@ void loop()
 			}
 			if (rj["cmd"] == CMD_GET_UPDATES)
 			{
-				read_console_updates(&updates);
-				StaticJsonDocument<READ_BUFFER_SIZE> root;
+				read_console_updates(&key_updates);
+				DynamicJsonDocument root(READ_BUFFER_SIZE);
 				JsonArray data = root.createNestedArray("data");
 				// read all updates and put them into the updates
-				for (int i = 0; i < updates.get_len(); i++)
+				for (unsigned int i = 0; i < key_updates.get_len(); i++)
 				{
-					int k;
-					int v;
-					updates.get_at(i, &k, &v);
+					MAP_KEY_TYPE k;
+					MAP_VALUE_TYPE v;
+					key_updates.get_at(i, &k, &v);
 					data.add(k);
 					data.add(v);
 				}
-				updates.clear();
-				serializeJson(root, Serial);
+				key_updates.clear();
+				serializeJson(root, Serial2);
 				Serial2.print('\n');
 				Serial2.flush();
 			}
@@ -862,6 +862,6 @@ void loop()
 	else
 	{
 		// check for pressed buttons anyway and store them
-		read_console_updates(&updates);
+		read_console_updates(&key_updates);
 	}
 }
