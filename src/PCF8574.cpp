@@ -9,13 +9,13 @@ test(pcf8574)
 	test_chip.selfTest();
 }
 
-PCF8574::PCF8574(uint8_t address) {
-	chip_hw_address = address;
-	last_data = 0;
-	last_debounced_data = 0;
-	last_error = 0;
-	last_update = 0;
-	input_mask = 0xff;
+PCF8574::PCF8574(int address) {
+	this->chip_hw_address = address;
+	this->last_data = 0;
+	this->last_debounced_data = 0;
+	this->last_error = 0;
+	this->last_update = 0;
+	this->input_mask = 0xff;
 }
 
 void PCF8574::selfTest()
@@ -36,7 +36,7 @@ void PCF8574::selfTest()
 
 byte PCF8574::getCurrentSignal()
 {
-	Wire.requestFrom(chip_hw_address, 1);
+	Wire.requestFrom( this->chip_hw_address, 1);
 	int current_data = Wire.read();
 	return current_data;
 }

@@ -1,6 +1,7 @@
 #include "mikemap.h"
 #include <ArduinoUnit.h>
 
+/*
 test(map)
 {
   MikeMap mm;
@@ -16,34 +17,35 @@ test(map)
   mm.clear();
   assertEqual(mm.get_len(), 0);
 }
+*/
 
 MikeMap::MikeMap()
 {
-  len=0;
+  this->len=0;
 }
 
-void MikeMap::set( int key, int value)
+void MikeMap::set( MAP_KEY_TYPE key, MAP_VALUE_TYPE value)
 {
-  for( int i=0; i<len; i++)
+  for( unsigned int i=0; i<this->len; i++)
   {
-    if( keys[i]==key)
+    if( this->keys[i]==key)
     {
-      values[i]=value;
+      this->values[i]=value;
       return;
     }
   }
-  if( len==MAX_MAP_LEN )
+  if( this->len==MAX_MAP_LEN )
     return;
-  keys[len]=key;
-  values[len]=value;
-  len++;
+  this->keys[len]=key;
+  this->values[len]=value;
+  this->len++;
 }
 
-bool MikeMap::has( int key) const
+bool MikeMap::has( MAP_KEY_TYPE key) const
 {
-  for( int i=0; i<len; i++)
+  for( unsigned int i=0; i<this->len; i++)
   {
-    if( keys[i]==key)
+    if( this->keys[i]==key)
     {
       return true;
     }
@@ -51,49 +53,50 @@ bool MikeMap::has( int key) const
   return false;
 }
 
-int MikeMap::get( int key) const
+MAP_VALUE_TYPE MikeMap::get( MAP_KEY_TYPE key) const
 {
-  for( int i=0; i<len; i++)
+  for( unsigned int i=0; i<this->len; i++)
   {
-    if( keys[i]==key)
+    if( this->keys[i]==key)
     {
-      return values[i];
+      return this->values[i];
     }
   }
   return 0;
 }
 
-void MikeMap::del( int key)
+void MikeMap::del( MAP_KEY_TYPE key)
 {
-  for( int i=0; i<len; i++)
+  for( unsigned int i=0; i<this->len; i++)
   {
-    if( keys[i]==key)
+    if( this->keys[i]==key)
     {
-      for( int si=i; si<len-1; si++)
+      for( unsigned int si=i; si<(this->len-1); si++)
       {
-        keys[si]   = keys[si+1];
-        values[si] = values[si+1];
+        this->keys[si]   = this->keys[si+1];
+        this->values[si] = this->values[si+1];
       }
-      len--;
+      this->len--;
       return;
     }
   }
 }
 
-int MikeMap::get_len() const
+unsigned int MikeMap::get_len() const
 {
-  return len;
+  return this->len;
 }
 
 void MikeMap::clear()
 {
-  len=0;
+  this->len=0;
 }
 
-void MikeMap::get_at( int at, int *key, int *value) const
+void MikeMap::get_at( unsigned int at, MAP_KEY_TYPE *key, MAP_VALUE_TYPE *value) const
 {
-  if( at>=len )
-    return;
-  *key=keys[at];
-  *value=values[at];
+  if( at<this->len )
+  {
+    *key=this->keys[at];
+    *value=this->values[at];
+  }
 }
