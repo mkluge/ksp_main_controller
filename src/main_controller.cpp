@@ -142,6 +142,7 @@ PCF8574 *light_chips[NUM_LIGHT_CHIPS] = {
 void dieError(int code);
 void reset_serial_buffer();
 void sendToSlave(const JsonDocument &message);
+void read_console_updates(MikeMap *updates);
 
 int min_freeRam = 0;
 
@@ -571,6 +572,7 @@ int serial_read_until(char delimiter, int max_bytes)
 	int bytes_read = 0;
 	while (1)
 	{
+		read_console_updates(&key_updates);
 		if (!Serial2.available())
 		{
 			continue;
@@ -625,9 +627,12 @@ void check_serial_port()
 	// second: read so many bytes in 32 byte chunks
 	while (bytes_to_read > 0)
 	{
+		read_console_updates(&key_updates);
 		int bytes_read = serial_read_until('\n', 32);
+		read_console_updates(&key_updates);
 		Serial2.print(F("OK"));
 		Serial2.flush();
+		read_console_updates(&key_updates);
 		bytes_to_read -= bytes_read;
 		if (message_complete == true)
 		{
@@ -821,8 +826,11 @@ void loop()
 	check_serial_port();
 	if (message_complete == true)
 	{
+		read_console_updates(&key_updates);
 		DynamicJsonDocument rj(READ_BUFFER_SIZE);
+		read_console_updates(&key_updates);
 		DeserializationError error = deserializeJson(rj, read_buffer);
+		read_console_updates(&key_updates);
 		if (error)
 		{
 			dieError(2);
@@ -838,6 +846,7 @@ void loop()
 				read_console_updates(&key_updates);
 				DynamicJsonDocument root(READ_BUFFER_SIZE);
 				JsonArray data = root.createNestedArray("data");
+				read_console_updates(&key_updates);
 				// read all updates and put them into the updates
 				for (unsigned int i = 0; i < key_updates.get_len(); i++)
 				{
@@ -852,13 +861,17 @@ void loop()
 //				root["tr"] = ai7.readValue();
 //				root["ro"] = ai3.readValue();
 				key_updates.clear();
+				read_console_updates(&key_updates);
 				serializeJson(root, Serial2);
 				Serial2.print('\n');
 				Serial2.flush();
+				read_console_updates(&key_updates);
 			}
 			else if (rj["cmd"] == CMD_UPDATE_CONSOLE)
 			{
+				read_console_updates(&key_updates);
 				update_console(rj["data"]);
+				read_console_updates(&key_updates);
 			}
 			else if (rj["cmd"] == CMD_INIT)
 			{
