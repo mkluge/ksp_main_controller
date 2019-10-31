@@ -21,9 +21,9 @@ public:
 
 	void calibrate();
 	void readInto( MikeMap *m, bool only_on_diff );
+	int readValue();
 
 private:
-	int readValue();
 
 	unsigned short pin;
 	long reference_value;

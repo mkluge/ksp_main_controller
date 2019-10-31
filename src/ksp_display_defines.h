@@ -64,7 +64,7 @@
 #define CMD_UPDATE_CONSOLE 110
 #define CMD_INIT 111
 
-int display_keys[]={
+unsigned int display_keys[8]={
 	INFO_APOAPSIS_TIME,
 	INFO_SURFACE_HEIGHT,
 	INFO_SURFACE_TIME,

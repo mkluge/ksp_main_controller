@@ -1,15 +1,25 @@
+#undef ANALOG_TEST
 #undef PRINT_DEBUG
+#undef SERIAL_TEST
+#define NO_DISPLAYS
 
-#include "Arduino.h"
-#include "ArduinoJson.h"
-#include "AnalogInput.h"
+#ifdef ANALOG_TEST
+#define TEST
+#endif
+
+#ifdef SERIAL_TEST
+#define TEST
+#endif
+
+#include <Arduino.h>
+#include <ArduinoJson.h>
+#include <AnalogInput.h>
+#include <LedControl.h>
 #include "ConsoleSetup.h"
 #include "PCF8574.h"
-#include "Wire.h"
-#include "LedControl.h"
+#include <Wire.h>
 #include "ksp_display_defines.h"
 #include "mikemap.h"
-//#include <ArduinoUnit.h>
 
 /*
  chip(pin)
@@ -24,8 +34,8 @@
  blau INT (19)
 
  Led panel 0-9 : 2(3) 2(4-7) 3(4) 3(0-3)
- 4 kn�pfe mitte: 0(4-7)
- licht 6(0-7) und 7(0-7)
+ 4 Knöpfe mitte: 0(4-7)
+ Licht 6(0-7) und 7(0-7)
 
  5 links: oben 1(0) 1(3-7); 3 statt 0??;
 
@@ -34,18 +44,25 @@
 #define NUM_ANALOG_BUTTONS 7
 #define NUM_KEY_CHIPS 5
 #define NUM_LIGHT_CHIPS 2
+#define NO_PIN 9
+#define NO_CHIP 9
+#define NO_KEY -1
+#define READ_BUFFER_SIZE 300
+// some button indizes for easier handling
+#define STAGE_BUTTON_INDEX 0
+#define RCS_BUTTON_INDEX 1
+#define SAS_BUTTON_INDEX 2
+#define GEAR_BUTTON_INDEX 3
+//#define LIGHT_BUTTON_INDEX 6
+//#define BRAKES_BUTTON_INDEX 7
 
-#define READ_BUFFER_SIZE 400
 char read_buffer[READ_BUFFER_SIZE];
 unsigned int read_buffer_offset = 0;
 int empty_buffer_size = 0;
 bool have_handshake = false;
 bool stage_enabled = false;
 bool message_complete = false;
-
-#define NO_PIN 9
-#define NO_CHIP 9
-#define NO_KEY -1
+bool interrupt_seen = false;
 
 LedControl led_top(5, 7, 6, 1);
 LedControl led_bottom(2, 4, 3, 1);
@@ -57,18 +74,23 @@ LedControl led_bottom(2, 4, 3, 1);
 // 2:       3 4 5 6 7
 // 1: 0 1 2 3 4 5 6 7 - FULL
 
+/* memorizes pressed buttons until stuff can be sent to master */
+MikeMap key_updates;
+/* memorizes data that will be send to display */
+MikeMap display_updates;
+
 int action_group_buttons[10] = {
 	BUTTON_ACTION_1, BUTTON_ACTION_2, BUTTON_ACTION_3, BUTTON_ACTION_4,
 	BUTTON_ACTION_5, BUTTON_ACTION_6, BUTTON_ACTION_7, BUTTON_ACTION_8,
 	BUTTON_ACTION_9, BUTTON_ACTION_10};
 
-AnalogInput ai1(KSP_INPUT_YAW, A5, true);
-AnalogInput ai2(KSP_INPUT_PITCH, A6, true);
-AnalogInput ai3(KSP_INPUT_ROLL, A7, true);
-AnalogInput ai4(KSP_INPUT_XTRANS, A2, true);
-AnalogInput ai5(KSP_INPUT_YTRANS, A3, true);
-AnalogInput ai6(KSP_INPUT_ZTRANS, A1, true);
-AnalogInput ai7(KSP_INPUT_THRUST, A0, false);
+AnalogInput ai1(KSP_INPUT_YAW, A13, true);
+AnalogInput ai2(KSP_INPUT_PITCH, A14, true);
+AnalogInput ai3(KSP_INPUT_ROLL, A15, true);
+AnalogInput ai4(KSP_INPUT_XTRANS, A10, true);
+AnalogInput ai5(KSP_INPUT_YTRANS, A11, true);
+AnalogInput ai6(KSP_INPUT_ZTRANS, A9, true);
+AnalogInput ai7(KSP_INPUT_THRUST, A8, false);
 
 AnalogInput *analog_inputs[NUM_ANALOG_INPUTS] = {
 	&ai1, &ai2, &ai3, &ai4, &ai5, &ai6, &ai7};
@@ -117,23 +139,11 @@ PCF8574 *light_chips[NUM_LIGHT_CHIPS] = {
 	*pin = lpin;  \
 	return true;
 
-// some button indizes for easier handling
-#define STAGE_BUTTON_INDEX 0
-#define RCS_BUTTON_INDEX 1
-#define SAS_BUTTON_INDEX 2
-#define GEAR_BUTTON_INDEX 3
-//#define LIGHT_BUTTON_INDEX 6
-//#define BRAKES_BUTTON_INDEX 7
-bool interrupt_seen = false;
-
 void dieError(int code);
 void reset_serial_buffer();
 void sendToSlave(const JsonDocument &message);
 
-/* memorizes pressed buttons until stuff can be sent to master */
-MikeMap key_updates;
-/* memorizes data that will be send to display */
-MikeMap display_updates;
+int min_freeRam = 0;
 
 int freeRam()
 {
@@ -141,6 +151,8 @@ int freeRam()
 	int v;
 	return (int)&v - (__brkval == 0 ? (int)&__heap_start : (int)__brkval);
 }
+//#define RAM min_freeRam = freeRam();
+#define RAM {}
 
 bool getPinForKey(int key, uint8_t *chip, uint8_t *pin)
 {
@@ -422,7 +434,7 @@ void testAllButtons(MikeMap *updates)
 {
 	// update chips
 	int index = 0;
-	for (auto pcf8754 : key_chips)
+	for (const auto &pcf8754 : key_chips)
 	{
 		byte changed_bits = 0x00;
 		if ((changed_bits = pcf8754->updateState()) != 0x00)
@@ -444,7 +456,9 @@ void testAllButtons(MikeMap *updates)
 							pcf8754->testPin(current_bit) == false) // low active
 						{
 							display_updates.set(BUTTON_NEXT_LEFT_TFT_MODE, 1);
+							RAM;
 						}
+						RAM;
 					}
 					else
 					{
@@ -459,11 +473,14 @@ void testAllButtons(MikeMap *updates)
 	}
 }
 
+#ifndef TEST
+
 void setup()
 {
 
+	//#ifndef NO_DISPLAYS
 	Wire.begin();
-
+//#endif
 #ifdef PRINT_DEBUG
 	Test::run();
 #endif
@@ -476,17 +493,17 @@ void setup()
 	delay(1000);
 	print_led(led_top, "        ");
 	print_led(led_bottom, "        ");
-	for (auto i : analog_inputs)
+	for (const auto &i : analog_inputs)
 	{
 		i->calibrate();
 	}
 
 	// to act as input, all outputs have to be on HIGH
-	for (auto kc : key_chips)
+	for (const auto &kc : key_chips)
 	{
 		kc->write(0xFF);
 	}
-	for (auto lc : light_chips)
+	for (const auto &lc : light_chips)
 	{
 		lc->setInputMask(0x00);
 		lc->write(0xff);
@@ -500,7 +517,7 @@ void setup()
 	key_chips[1]->setInputMask(0xff);
 	key_chips[2]->setInputMask(0xff);
 	key_chips[3]->setInputMask(0xff);
-	for (auto lc : light_chips)
+	for (const auto &lc : light_chips)
 	{
 		lc->write(0x00);
 	}
@@ -522,12 +539,14 @@ void setup()
 	// wait for the i2c slave to initialize
 	delay(100);
 
+#ifndef NO_DISPLAYS
 	// send init to display
 	// this should also give us the initial
 	// reply from the display controller to get the thing going
 	DynamicJsonDocument root(DISPLAY_WIRE_BUFFER_SIZE);
 	root["chk"] = 1;
 	sendToSlave(root);
+#endif
 
 	Serial2.begin(115200);
 	empty_buffer_size = Serial2.availableForWrite();
@@ -537,6 +556,8 @@ void setup()
 	Serial2.println(F("setup ende"));
 #endif
 }
+
+#endif
 
 void reset_serial_buffer()
 {
@@ -623,10 +644,12 @@ void dieError(int code)
 		;
 }
 
+#ifndef NO_DISPLAYS
 // warning: this thing just sends, it does not care about
 // the protocoll (the 77 coming back as "ready to receive")
 void sendToSlave(const JsonDocument &message)
 {
+
 	char buf[DISPLAY_WIRE_BUFFER_SIZE];
 	int len = serializeJson(message, buf);
 	buf[len] = '\n';
@@ -649,8 +672,9 @@ void sendToSlave(const JsonDocument &message)
 		ptr += send_len;
 	}
 	// request the reply
-	Wire.requestFrom( DISPLAY_I2C_ADDRESS, 1);
+	Wire.requestFrom(DISPLAY_I2C_ADDRESS, 1);
 }
+#endif
 
 void setLightPin(int key, bool state)
 {
@@ -724,42 +748,47 @@ void update_console(const JsonArray &data)
 	}
 
 	// put stuff into display_updates
-	for( auto key: display_keys)
+	for (const auto &key : display_keys)
 	{
-		index = check_for_key( data, key);
-		if ( index != KEY_NOT_FOUND )
+		index = check_for_key(data, key);
+		if (index != KEY_NOT_FOUND)
 		{
-			display_updates.set( data[index], data[index+1]);
+			display_updates.set(data[index], data[index + 1]);
 		}
 	}
 
+#ifndef NO_DISPLAYS
 	// send stuff to slave, if the slave is ok with this
 	// it is OK, if we have a byte on the wire waiting
-	if( Wire.available()>0 && display_updates.get_len()>0)
+	if (Wire.available() > 0 && display_updates.get_len() > 0)
 	{
-		byte b=Wire.read();
-		if (b!=77) {
+		byte b = Wire.read();
+		if (b != 77)
+		{
 			dieError(88);
 		}
 		// OK, send
-		for( unsigned int i=0; i<display_updates.get_len(); i++)
+		for (unsigned int i = 0; i < display_updates.get_len(); i++)
 		{
 			MAP_KEY_TYPE k;
 			MAP_VALUE_TYPE v;
-			display_updates.get_at( i, &k, &v);
+			display_updates.get_at(i, &k, &v);
 			data.add(k);
 			data.add(v);
+			RAM;
 		}
 		display_updates.clear();
 		DynamicJsonDocument root(DISPLAY_WIRE_BUFFER_SIZE);
-		root["data"]=data;
+		root["data"] = data;
 		sendToSlave(root);
+		RAM;
 	}
+#endif
 }
 
 void read_console_updates(MikeMap *updates)
 {
-	for (auto ai : analog_inputs)
+	for (const auto &ai : analog_inputs)
 	{
 		ai->readInto(updates, false);
 	}
@@ -783,6 +812,8 @@ void read_console_updates(MikeMap *updates)
 		updates->del(BUTTON_STAGE);
 	}
 }
+
+#ifndef TEST
 
 void loop()
 {
@@ -815,7 +846,11 @@ void loop()
 					key_updates.get_at(i, &k, &v);
 					data.add(k);
 					data.add(v);
+					RAM;
 				}
+//				root["fr"] = min_freeRam;
+//				root["tr"] = ai7.readValue();
+//				root["ro"] = ai3.readValue();
 				key_updates.clear();
 				serializeJson(root, Serial2);
 				Serial2.print('\n');
@@ -865,3 +900,64 @@ void loop()
 		read_console_updates(&key_updates);
 	}
 }
+
+#endif
+
+//
+// Test Setup for testing analog pins
+//
+#ifdef ANALOG_TEST
+
+void setup()
+{
+	for (const auto &i : analog_inputs)
+	{
+		i->calibrate();
+	}
+
+	Serial2.begin(115200);
+	empty_buffer_size = Serial2.availableForWrite();
+	setupLC(led_top, 15);
+	setupLC(led_bottom, 3);
+	print_led(led_top, "- - -");
+	print_led(led_bottom, "- - -");
+}
+
+void loop()
+{
+	print_led(led_top, ai5.readValue());
+	print_led(led_bottom, ai3.readValue());
+}
+#endif
+
+#ifdef SERIAL_TEST
+
+void setup()
+{
+	Serial.begin(115200);
+	Serial2.begin(115200);
+}
+
+void loop()
+{
+	// reply only when you receive data:
+	if (Serial.available() > 0)
+	{
+		// read the incoming byte:
+		Serial.read();
+
+		// say what you got:
+		Serial.print("1");
+		Serial.flush();
+	}
+	if (Serial2.available() > 0)
+	{
+		// read the incoming byte:
+		Serial2.read();
+
+		// say what you got:
+		Serial2.print("2");
+		Serial2.flush();
+	}
+}
+#endif

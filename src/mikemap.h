@@ -3,7 +3,8 @@
 
 #define MAX_MAP_LEN 50
 
-#include "stdint.h"
+#include <stdlib.h>
+#include <stdint.h>
 
 #define MAP_KEY_TYPE uint8_t
 #define MAP_VALUE_TYPE int16_t
@@ -21,9 +22,9 @@ class MikeMap {
     void clear();
 
   private:
-    uint8_t keys[MAX_MAP_LEN];
-    int16_t values[MAX_MAP_LEN];
-    unsigned int len;
+    MAP_KEY_TYPE keys[MAX_MAP_LEN];
+    MAP_VALUE_TYPE values[MAX_MAP_LEN];
+    size_t len;
 
 };
 
