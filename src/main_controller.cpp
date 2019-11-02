@@ -11,6 +11,8 @@
 #define TEST
 #endif
 
+#define SERIAL_PORT Serial2
+
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <AnalogInput.h>
@@ -435,6 +437,7 @@ void testAllButtons(MikeMap *updates)
 {
 	// update chips
 	int index = 0;
+
 	for (const auto &pcf8754 : key_chips)
 	{
 		byte changed_bits = 0x00;
@@ -450,21 +453,24 @@ void testAllButtons(MikeMap *updates)
 					if (key != NO_KEY)
 					{
 						// low active inputs
-						updates->set(key,
-									 (pcf8754->testPin(current_bit) == false) ? 1 : 0);
-						// remember buttons that trigger the display controller directly
-						if (key == BUTTON_NEXT_LEFT_TFT_MODE &&
-							pcf8754->testPin(current_bit) == false) // low active
+						short new_state = (pcf8754->testPin(current_bit) == false) ? 1 : 0;
+						// set only on keydown, except for the two switches
+						if ( new_state == 1 || //pressed 
+							 key == BUTTON_SWITCH_RIGHT ||
+							 key == BUTTON_SWITCH_LEFT )
 						{
-							display_updates.set(BUTTON_NEXT_LEFT_TFT_MODE, 1);
-							RAM;
+							updates->set( key, new_state);
+	#						// remember buttons that trigger the display controller directly
+							if (key == BUTTON_NEXT_LEFT_TFT_MODE )
+							{
+								display_updates.set(BUTTON_NEXT_LEFT_TFT_MODE, 1);
+							}
 						}
-						RAM;
 					}
-					else
-					{
-						updates->set(401 + index, current_bit);
-					}
+//					else
+//					{
+//						updates->set(401 + index, current_bit);
+//					}
 				}
 				current_bit++;
 				changed_bits >>= 1;
@@ -549,12 +555,12 @@ void setup()
 	sendToSlave(root);
 #endif
 
-	Serial2.begin(115200);
-	empty_buffer_size = Serial2.availableForWrite();
+	SERIAL_PORT.begin(115200);
+	empty_buffer_size = SERIAL_PORT.availableForWrite();
 	print_led(led_bottom, "- - -");
 
 #ifdef PRINT_DEBUG
-	Serial2.println(F("setup ende"));
+	SERIAL_PORT.println(F("setup ende"));
 #endif
 }
 
@@ -572,13 +578,7 @@ int serial_read_until(char delimiter, int max_bytes)
 	int bytes_read = 0;
 	while (1)
 	{
-		read_console_updates(&key_updates);
-		if (!Serial2.available())
-		{
-			continue;
-		}
-		//		print_led(&led_top, bytes_read);
-		char inByte = Serial2.read();
+		char inByte = SERIAL_PORT.read();
 		bytes_read++;
 		if (read_buffer_offset < (READ_BUFFER_SIZE - 1))
 		{
@@ -611,10 +611,14 @@ void check_serial_port()
 {
 	if (message_complete == true)
 	{
+		// not supposed to happen, that we have a complete
+		// message on board an not yet processed and another
+		// message arrives
+		dieError(88);
 		return;
 	}
 	// nothing is waiting, so just leave ...
-	if (!Serial2.available())
+	if (!SERIAL_PORT.available())
 	{
 		return;
 	}
@@ -623,22 +627,8 @@ void check_serial_port()
 	int bytes_to_read = atoi(read_buffer);
 	//	print_led(&led_bottom, bytes_to_read);
 	reset_serial_buffer();
-
-	// second: read so many bytes in 32 byte chunks
-	while (bytes_to_read > 0)
-	{
-		read_console_updates(&key_updates);
-		int bytes_read = serial_read_until('\n', 32);
-		read_console_updates(&key_updates);
-		Serial2.print(F("OK"));
-		Serial2.flush();
-		read_console_updates(&key_updates);
-		bytes_to_read -= bytes_read;
-		if (message_complete == true)
-		{
-			return;
-		}
-	}
+	serial_read_until('\n', bytes_to_read);
+	SERIAL_PORT.print("OK");
 }
 
 void dieError(int code)
@@ -729,13 +719,15 @@ void update_console(const JsonArray &data)
 {
 	//	static unsigned long last_display_update = 0;
 
+	read_console_updates(&key_updates);
 	check_button_enabled(data, BUTTON_RCS);
 	check_button_enabled(data, BUTTON_SAS);
 	check_button_enabled(data, BUTTON_GEAR);
 	//	check_button_enabled( rj, BUTTON_LIGHTS, LIGHT_BUTTON_INDEX);
 	//	check_button_enabled( rj, BUTTON_BREAKS, BRAKES_BUTTON_INDEX);
 	check_action_groups_enabled(data);
-
+	
+	read_console_updates(&key_updates);
 	auto index = check_for_key(data, INFO_SPEED);
 	if (index != KEY_NOT_FOUND)
 	{
@@ -744,6 +736,7 @@ void update_console(const JsonArray &data)
 		//		data.remove(index);
 	}
 
+	read_console_updates(&key_updates);
 	index = check_for_key(data, INFO_HEIGHT);
 	if (index != KEY_NOT_FOUND)
 	{
@@ -752,6 +745,7 @@ void update_console(const JsonArray &data)
 		//		data.remove(index);
 	}
 
+#ifndef NO_DISPLAYS
 	// put stuff into display_updates
 	for (const auto &key : display_keys)
 	{
@@ -762,7 +756,6 @@ void update_console(const JsonArray &data)
 		}
 	}
 
-#ifndef NO_DISPLAYS
 	// send stuff to slave, if the slave is ok with this
 	// it is OK, if we have a byte on the wire waiting
 	if (Wire.available() > 0 && display_updates.get_len() > 0)
@@ -862,16 +855,14 @@ void loop()
 //				root["ro"] = ai3.readValue();
 				key_updates.clear();
 				read_console_updates(&key_updates);
-				serializeJson(root, Serial2);
-				Serial2.print('\n');
-				Serial2.flush();
+				serializeJson(root, SERIAL_PORT);
+				SERIAL_PORT.print('\n');
+				SERIAL_PORT.flush();
 				read_console_updates(&key_updates);
 			}
 			else if (rj["cmd"] == CMD_UPDATE_CONSOLE)
 			{
-				read_console_updates(&key_updates);
 				update_console(rj["data"]);
-				read_console_updates(&key_updates);
 			}
 			else if (rj["cmd"] == CMD_INIT)
 			{
@@ -928,8 +919,8 @@ void setup()
 		i->calibrate();
 	}
 
-	Serial2.begin(115200);
-	empty_buffer_size = Serial2.availableForWrite();
+	SERIAL_PORT.begin(115200);
+	empty_buffer_size = SERIAL_PORT.availableForWrite();
 	setupLC(led_top, 15);
 	setupLC(led_bottom, 3);
 	print_led(led_top, "- - -");
@@ -948,7 +939,7 @@ void loop()
 void setup()
 {
 	Serial.begin(115200);
-	Serial2.begin(115200);
+	SERIAL_PORT.begin(115200);
 }
 
 void loop()
@@ -963,14 +954,14 @@ void loop()
 		Serial.print("1");
 		Serial.flush();
 	}
-	if (Serial2.available() > 0)
+	if (SERIAL_PORT.available() > 0)
 	{
 		// read the incoming byte:
-		Serial2.read();
+		SERIAL_PORT.read();
 
 		// say what you got:
-		Serial2.print("2");
-		Serial2.flush();
+		SERIAL_PORT.print("2");
+		SERIAL_PORT.flush();
 	}
 }
 #endif
