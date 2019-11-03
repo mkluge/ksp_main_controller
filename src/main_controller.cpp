@@ -588,14 +588,6 @@ int serial_read_until(char delimiter)
 			{
 				break;
 			}
-
-//			if( read_buffer_offset==112 )
-//			{
-//				print_led( led_top, (inByte=='+') ? "1" : "0");
-//				print_led( led_bottom, (int) inByte);
-//				while(1);
-//			}
-
 			if (read_buffer_offset < (READ_BUFFER_SIZE - 2))
 			{
 				read_buffer[read_buffer_offset] = (char)inByte;
@@ -605,12 +597,6 @@ int serial_read_until(char delimiter)
 			{
 				dieError(99);
 			}
-			// we are done if we have reached the delimiter
-			// or if we've read the max number of bytes
-	//		if (bytes_read == max_bytes)
-	//		{
-	//			return bytes_read;
-	//		}
 		}
 	}
 	read_buffer[read_buffer_offset] = 0;
@@ -637,17 +623,10 @@ void check_serial_port()
 	{
 		return;
 	}
-	// first: read the number of bytes, should'nt be nore than 10
-//	reset_serial_buffer();
-//	serial_read_until(':');
-//	int bytes_to_read = atoi(read_buffer);
-//	print_led( led_bottom, bytes_to_read);
-//	reset_serial_buffer();
+	// if transmission has started, read until the delimiter
 	serial_read_until('+');
+	// send the serial ACK
 	SERIAL_PORT.print("OK");
-//	print_led( led_top, bytes_read);	
-//	if( bytes_read!=25 )
-//		while(1);
 }
 
 void dieError(int code)
