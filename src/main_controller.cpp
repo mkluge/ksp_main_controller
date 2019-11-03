@@ -155,7 +155,9 @@ int freeRam()
 	return (int)&v - (__brkval == 0 ? (int)&__heap_start : (int)__brkval);
 }
 //#define RAM min_freeRam = freeRam();
-#define RAM {}
+#define RAM \
+	{       \
+	}
 
 bool getPinForKey(int key, uint8_t *chip, uint8_t *pin)
 {
@@ -455,22 +457,22 @@ void testAllButtons(MikeMap *updates)
 						// low active inputs
 						short new_state = (pcf8754->testPin(current_bit) == false) ? 1 : 0;
 						// set only on keydown, except for the two switches
-						if ( new_state == 1 || //pressed 
-							 key == BUTTON_SWITCH_RIGHT ||
-							 key == BUTTON_SWITCH_LEFT )
+						if (new_state == 1 || //pressed
+							key == BUTTON_SWITCH_RIGHT ||
+							key == BUTTON_SWITCH_LEFT)
 						{
-							updates->set( key, new_state);
-	#						// remember buttons that trigger the display controller directly
-							if (key == BUTTON_NEXT_LEFT_TFT_MODE )
+							updates->set(key, new_state);
+#// remember buttons that trigger the display controller directly
+							if (key == BUTTON_NEXT_LEFT_TFT_MODE)
 							{
 								display_updates.set(BUTTON_NEXT_LEFT_TFT_MODE, 1);
 							}
 						}
 					}
-//					else
-//					{
-//						updates->set(401 + index, current_bit);
-//					}
+					//					else
+					//					{
+					//						updates->set(401 + index, current_bit);
+					//					}
 				}
 				current_bit++;
 				changed_bits >>= 1;
@@ -573,34 +575,47 @@ void reset_serial_buffer()
 	message_complete = false;
 }
 
-int serial_read_until(char delimiter, int max_bytes)
+int serial_read_until(char delimiter)
 {
 	int bytes_read = 0;
 	while (1)
 	{
-		char inByte = SERIAL_PORT.read();
-		bytes_read++;
-		if (read_buffer_offset < (READ_BUFFER_SIZE - 1))
+		if( SERIAL_PORT.available() )
 		{
-			read_buffer[read_buffer_offset] = (char)inByte;
-			read_buffer_offset++;
-		}
-		else
-		{
-			dieError(99);
-		}
-		// we are done if we have reached the delimiter
-		if (inByte == delimiter)
-		{
-			message_complete = true;
-			return bytes_read;
-		}
-		// or if we've read the max number of bytes
-		if (bytes_read == max_bytes)
-		{
-			return bytes_read;
+			char inByte = (char) SERIAL_PORT.read();
+			bytes_read++;
+			if (inByte == delimiter)
+			{
+				break;
+			}
+
+//			if( read_buffer_offset==112 )
+//			{
+//				print_led( led_top, (inByte=='+') ? "1" : "0");
+//				print_led( led_bottom, (int) inByte);
+//				while(1);
+//			}
+
+			if (read_buffer_offset < (READ_BUFFER_SIZE - 2))
+			{
+				read_buffer[read_buffer_offset] = (char)inByte;
+				read_buffer_offset++;
+			}
+			else
+			{
+				dieError(99);
+			}
+			// we are done if we have reached the delimiter
+			// or if we've read the max number of bytes
+	//		if (bytes_read == max_bytes)
+	//		{
+	//			return bytes_read;
+	//		}
 		}
 	}
+	read_buffer[read_buffer_offset] = 0;
+	message_complete = true;
+	return bytes_read;
 }
 
 // read the data into the buffer,
@@ -622,18 +637,22 @@ void check_serial_port()
 	{
 		return;
 	}
-	// first: read the number of bytes, schould'nt be nore than 10
-	serial_read_until(':', 10);
-	int bytes_to_read = atoi(read_buffer);
-	//	print_led(&led_bottom, bytes_to_read);
-	reset_serial_buffer();
-	serial_read_until('\n', bytes_to_read);
+	// first: read the number of bytes, should'nt be nore than 10
+//	reset_serial_buffer();
+//	serial_read_until(':');
+//	int bytes_to_read = atoi(read_buffer);
+//	print_led( led_bottom, bytes_to_read);
+//	reset_serial_buffer();
+	serial_read_until('+');
 	SERIAL_PORT.print("OK");
+//	print_led( led_top, bytes_read);	
+//	if( bytes_read!=25 )
+//		while(1);
 }
 
 void dieError(int code)
 {
-	print_led(led_top, 33333333);
+	print_led(led_top, "Error:");
 	print_led(led_bottom, code);
 	while (44)
 		;
@@ -726,7 +745,7 @@ void update_console(const JsonArray &data)
 	//	check_button_enabled( rj, BUTTON_LIGHTS, LIGHT_BUTTON_INDEX);
 	//	check_button_enabled( rj, BUTTON_BREAKS, BRAKES_BUTTON_INDEX);
 	check_action_groups_enabled(data);
-	
+
 	read_console_updates(&key_updates);
 	auto index = check_for_key(data, INFO_SPEED);
 	if (index != KEY_NOT_FOUND)
@@ -815,7 +834,6 @@ void read_console_updates(MikeMap *updates)
 
 void loop()
 {
-	reset_serial_buffer();
 	check_serial_port();
 	if (message_complete == true)
 	{
@@ -850,9 +868,9 @@ void loop()
 					data.add(v);
 					RAM;
 				}
-//				root["fr"] = min_freeRam;
-//				root["tr"] = ai7.readValue();
-//				root["ro"] = ai3.readValue();
+				//				root["fr"] = min_freeRam;
+				//				root["tr"] = ai7.readValue();
+				//				root["ro"] = ai3.readValue();
 				key_updates.clear();
 				read_console_updates(&key_updates);
 				serializeJson(root, SERIAL_PORT);
@@ -871,6 +889,7 @@ void loop()
 				have_handshake = true;
 			}
 		}
+		reset_serial_buffer();
 	}
 	// some funny blinking as long as we dont have a handshake
 	if (!have_handshake)
