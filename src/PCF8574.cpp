@@ -50,27 +50,38 @@ byte PCF8574::getInputMask() {
 	return input_mask;
 }
 
+// returns if pins have a stable change
+// the bits set denote the pins that had a change
+// to have a stable signal, we read the current signal
+// and compare it with the last signal; if the new signal
+// ist stable for a while, we use it as the new stable signal
+// and return the difference to the old stable signal
 byte PCF8574::updateState() {
 	byte current_data = getCurrentSignal();
 	// make bits that are used as outputs to show up as zeros
 	current_data &= input_mask;
 	if( last_data != current_data )
 	{
-		// yes -> reset the timer
+		last_data = current_data;
+		// reset the timer
 		last_update = millis();
 	}
 	else
 	{
-		if( millis()-last_update > debounceDelay &&
-			last_data != last_debounced_data )
-		{
-			byte modified_bits = last_debounced_data ^ last_data;
-			last_debounced_data = last_data;
-			return modified_bits;
+		// is it a different value?
+		if( last_data!=last_debounced_data ) {
+			// stable for some time ?
+			if( millis()-last_update >= debounceDelay )
+			{
+				// get the modified bits
+				byte modified_bits = last_debounced_data ^ last_data;
+				last_debounced_data = last_data;
+				return modified_bits;
+			}
 		}
 	}
-	last_data = current_data;
-	return 0x00;
+	// 0 equals to "no modified bits"
+	return 0;
 }
 
 byte PCF8574::getValue() {

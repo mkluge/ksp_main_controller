@@ -1,6 +1,8 @@
 #undef ANALOG_TEST
 #undef PRINT_DEBUG
 #undef SERIAL_TEST
+#define KEY_TEST
+
 #define NO_DISPLAYS
 
 #ifdef ANALOG_TEST
@@ -8,6 +10,10 @@
 #endif
 
 #ifdef SERIAL_TEST
+#define TEST
+#endif
+
+#ifdef KEY_TEST
 #define TEST
 #endif
 
@@ -438,47 +444,43 @@ void print_led(LedControl &target, const char *str)
 void testAllButtons(MikeMap *updates)
 {
 	// update chips
-	int index = 0;
+	int chip_index = 0;
 
-	for (const auto &pcf8754 : key_chips)
+	for (PCF8574 *pcf8754 : key_chips)
 	{
-		byte changed_bits = 0x00;
-		if ((changed_bits = pcf8754->updateState()) != 0x00)
+		byte changed_bits = pcf8754->updateState();
+		if ( changed_bits != 0x00)
 		{
 			// test all bits and update the json for each bit set
 			int current_bit = 0;
 			while (changed_bits != 0)
 			{
-				if (changed_bits & (0x01))
+				if (changed_bits & 1)
 				{
-					int key = getKeyForChipPin(index, current_bit);
+					int key = getKeyForChipPin( chip_index, current_bit);
 					if (key != NO_KEY)
 					{
 						// low active inputs
 						short new_state = (pcf8754->testPin(current_bit) == false) ? 1 : 0;
 						// set only on keydown, except for the two switches
-						if (new_state == 1 || //pressed
+						if (new_state == 1 || // pressed
 							key == BUTTON_SWITCH_RIGHT ||
 							key == BUTTON_SWITCH_LEFT)
 						{
-							updates->set(key, new_state);
-#// remember buttons that trigger the display controller directly
+							updates->set( key, new_state);
+							// remember buttons that trigger the display controller directly
 							if (key == BUTTON_NEXT_LEFT_TFT_MODE)
 							{
-								display_updates.set(BUTTON_NEXT_LEFT_TFT_MODE, 1);
+								display_updates.set( BUTTON_NEXT_LEFT_TFT_MODE, 1);
 							}
 						}
 					}
-					//					else
-					//					{
-					//						updates->set(401 + index, current_bit);
-					//					}
 				}
 				current_bit++;
 				changed_bits >>= 1;
 			}
 		}
-		index++;
+		chip_index++;
 	}
 }
 
@@ -526,7 +528,7 @@ void setup()
 	key_chips[1]->setInputMask(0xff);
 	key_chips[2]->setInputMask(0xff);
 	key_chips[3]->setInputMask(0xff);
-	for (const auto &lc : light_chips)
+	for (PCF8574 *lc : light_chips)
 	{
 		lc->write(0x00);
 	}
@@ -604,10 +606,6 @@ int serial_read_until(char delimiter)
 	return bytes_read;
 }
 
-// read the data into the buffer,
-// if the current input buffer is not full
-
-// called automatically when serial data is available
 void check_serial_port()
 {
 	if (message_complete == true)
@@ -689,8 +687,6 @@ void check_action_groups_enabled(const JsonArray &data)
 			setLightPin(action_group_buttons[bit], status & mask);
 			mask = mask * 2;
 		}
-		//		data.remove(index+1);
-		//		data.remove(index);
 	}
 }
 
@@ -700,16 +696,7 @@ void check_button_enabled(const JsonArray &data, unsigned short key)
 	if (index != KEY_NOT_FOUND)
 	{
 		bool state = data[index + 1] == 1 ? true : false;
-		/*		if( key==BUTTON_RCS )
-		{
-			print_led( led_bottom, state==true ? "11" : "99");
-			PCF8574 test(PCF_BASE_ADDRESS + 5);
-			test.setInputMask(0x00);
-			test.setPin(1, state);
-		}*/
 		setLightPin(key, state);
-		//		data.remove(index+1);
-		//		data.remove(index);
 	}
 }
 
@@ -855,7 +842,6 @@ void loop()
 				serializeJson(root, SERIAL_PORT);
 				SERIAL_PORT.print('\n');
 				SERIAL_PORT.flush();
-				read_console_updates(&key_updates);
 			}
 			else if (rj["cmd"] == CMD_UPDATE_CONSOLE)
 			{
@@ -962,4 +948,73 @@ void loop()
 		SERIAL_PORT.flush();
 	}
 }
+#endif
+
+#ifdef KEY_TEST
+
+
+void setup()
+{
+	Wire.begin();
+	key_updates.clear();
+	display_updates.clear();
+	setupLC(led_top, 15);
+	setupLC(led_bottom, 3);
+	print_led(led_top, 88888888);
+	print_led(led_bottom, 88888888);
+	delay(200);
+	print_led(led_top, "        ");
+	print_led(led_bottom, "        ");
+	// to act as input, all outputs have to be on HIGH
+	for (const auto &kc : key_chips)
+	{
+		kc->write(0xFF);
+	}
+	for (const auto &lc : light_chips)
+	{
+		lc->setInputMask(0x00);
+		lc->write(0xff);
+	}
+	// first 4 chips have all pins as inputs
+	key_chips[0]->setInputMask(0xff);
+	key_chips[1]->setInputMask(0xff);
+	key_chips[2]->setInputMask(0xff);
+	key_chips[3]->setInputMask(0xff);
+	for (PCF8574 *lc : light_chips)
+	{
+		lc->write(0x00);
+	}
+	// set input mask for chip 4, all inputs except
+	// unset bits 4 and 5 for the two leds
+	byte kc5_mask = 0xff;
+	kc5_mask &= ~(1 << 4);
+	kc5_mask &= ~(1 << 5);
+	key_chips[4]->setInputMask(kc5_mask);
+	// turn off the two leds
+	// LED rechts
+	key_chips[4]->setPin(4, 0);
+	// LED links
+	key_chips[4]->setPin(5, 0);
+}
+
+void loop()
+{
+	read_console_updates(&key_updates);
+	delay(40);
+	read_console_updates(&key_updates);
+	delay(40);
+	read_console_updates(&key_updates);
+	delay(40);
+	read_console_updates(&key_updates);
+	delay(40);
+	read_console_updates(&key_updates);
+	delay(40);
+	read_console_updates(&key_updates);
+	delay(40);
+	read_console_updates(&key_updates);
+	delay(40);
+
+//	FIX TEST
+}
+
 #endif
