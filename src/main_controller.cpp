@@ -1,7 +1,7 @@
 #undef ANALOG_TEST
 #undef PRINT_DEBUG
 #undef SERIAL_TEST
-#define KEY_TEST
+#undef KEY_TEST
 
 #define NO_DISPLAYS
 
@@ -151,6 +151,7 @@ void dieError(int code);
 void reset_serial_buffer();
 void sendToSlave(const JsonDocument &message);
 void read_console_updates(MikeMap *updates);
+bool isSwitchEnabled(int key);
 
 int min_freeRam = 0;
 
@@ -449,7 +450,7 @@ void testAllButtons(MikeMap *updates)
 	for (PCF8574 *pcf8754 : key_chips)
 	{
 		byte changed_bits = pcf8754->updateState();
-		if ( changed_bits != 0x00)
+		if (changed_bits != 0x00)
 		{
 			// test all bits and update the json for each bit set
 			int current_bit = 0;
@@ -457,21 +458,19 @@ void testAllButtons(MikeMap *updates)
 			{
 				if (changed_bits & 1)
 				{
-					int key = getKeyForChipPin( chip_index, current_bit);
+					int key = getKeyForChipPin(chip_index, current_bit);
 					if (key != NO_KEY)
 					{
 						// low active inputs
 						short new_state = (pcf8754->testPin(current_bit) == false) ? 1 : 0;
-						// set only on keydown, except for the two switches
-						if (new_state == 1 || // pressed
-							key == BUTTON_SWITCH_RIGHT ||
-							key == BUTTON_SWITCH_LEFT)
+						// set only on keydown
+						if (new_state == 1)
 						{
-							updates->set( key, new_state);
+							updates->set(key, new_state);
 							// remember buttons that trigger the display controller directly
 							if (key == BUTTON_NEXT_LEFT_TFT_MODE)
 							{
-								display_updates.set( BUTTON_NEXT_LEFT_TFT_MODE, 1);
+								display_updates.set(BUTTON_NEXT_LEFT_TFT_MODE, 1);
 							}
 						}
 					}
@@ -482,6 +481,18 @@ void testAllButtons(MikeMap *updates)
 		}
 		chip_index++;
 	}
+}
+
+bool isSwitchEnabled(int key)
+{
+	uint8_t chip;
+	uint8_t pin;
+
+	if (!getPinForKey(key, &chip, &pin))
+		return false;
+
+	// low active
+	return (key_chips[chip]->testPin(pin) == false);
 }
 
 #ifndef TEST
@@ -582,9 +593,9 @@ int serial_read_until(char delimiter)
 	int bytes_read = 0;
 	while (1)
 	{
-		if( SERIAL_PORT.available() )
+		if (SERIAL_PORT.available())
 		{
-			char inByte = (char) SERIAL_PORT.read();
+			char inByte = (char)SERIAL_PORT.read();
 			bytes_read++;
 			if (inByte == delimiter)
 			{
@@ -671,8 +682,10 @@ void setLightPin(int key, bool state)
 {
 	uint8_t chip;
 	uint8_t pin;
-	getLightFromKey(key, &chip, &pin);
-	light_chips[chip]->setPin(pin, state);
+	if (getLightFromKey(key, &chip, &pin) == true)
+	{
+		light_chips[chip]->setPin(pin, state);
+	}
 }
 
 void check_action_groups_enabled(const JsonArray &data)
@@ -771,24 +784,21 @@ void update_console(const JsonArray &data)
 
 void read_console_updates(MikeMap *updates)
 {
-	for (const auto &ai : analog_inputs)
+	for (AnalogInput *ai : analog_inputs)
 	{
 		ai->readInto(updates, false);
 	}
 	testAllButtons(updates);
 	// there are two special buttons :)
 	// the two switches on the right top
-	if (updates->has(BUTTON_SWITCH_RIGHT))
-	{
-		bool value = (updates->get(BUTTON_SWITCH_RIGHT) == 1) ? true : false;
-		key_chips[4]->setPin(4, value);
-		light_chips[0]->setPin(0, value);
-		stage_enabled = value;
-	}
-	if (updates->has(BUTTON_SWITCH_LEFT))
-	{
-		key_chips[4]->setPin(5, (updates->get(BUTTON_SWITCH_LEFT)) ? true : false);
-	}
+
+	bool value = isSwitchEnabled(BUTTON_SWITCH_RIGHT);
+	key_chips[4]->setPin(4, value);
+	light_chips[0]->setPin(0, value);
+	stage_enabled = value;
+
+	key_chips[4]->setPin(5, isSwitchEnabled(BUTTON_SWITCH_LEFT));
+
 	// let "stage" only pass if staging is enabled
 	if (updates->get(BUTTON_STAGE) && stage_enabled == false)
 	{
@@ -952,7 +962,6 @@ void loop()
 
 #ifdef KEY_TEST
 
-
 void setup()
 {
 	Wire.begin();
@@ -999,22 +1008,74 @@ void setup()
 
 void loop()
 {
-	read_console_updates(&key_updates);
-	delay(40);
-	read_console_updates(&key_updates);
-	delay(40);
-	read_console_updates(&key_updates);
-	delay(40);
-	read_console_updates(&key_updates);
-	delay(40);
-	read_console_updates(&key_updates);
-	delay(40);
-	read_console_updates(&key_updates);
-	delay(40);
-	read_console_updates(&key_updates);
-	delay(40);
+	MikeMap mm1, mm2;
+/*
+	while(1) {
+		print_led( led_top, isSwitchEnabled(BUTTON_SWITCH_RIGHT) ? "1" : "0");
+		print_led( led_bottom, kc5.getCurrentSignal());
+		key_chips[4]->setPin(5, isSwitchEnabled(BUTTON_SWITCH_LEFT));
+		key_chips[4]->setPin(4, isSwitchEnabled(BUTTON_SWITCH_RIGHT));
+	}
+*/
+/*
+	while(1) {
+		print_led( led_top, (kc5.getCurrentSignal() & (1<<4)) ? "1" : "0");
+//		print_led( led_bottom, isSwitchEnabled(BUTTON_SWITCH_RIGHT) ? "1" : "0");
+		while(1) {};
+//		key_chips[4]->write((1<<4));
+		key_chips[4]->setPin(4, 1);
+		key_chips[4]->setPin(5, 0);
+		delay(500);
 
-//	FIX TEST
+//		key_chips[4]->write((1<<5));
+		key_chips[4]->setPin(5, 1);
+		key_chips[4]->setPin(4, 0);
+		delay(500);
+	}
+*/
+
+	while(1) {
+		testAllButtons(&mm1);
+		print_led( led_top, isSwitchEnabled(BUTTON_SWITCH_LEFT) ? "1" : "0");
+		print_led( led_bottom, isSwitchEnabled(BUTTON_SWITCH_RIGHT) ? "1" : "0");
+		key_chips[4]->setPin(5, isSwitchEnabled(BUTTON_SWITCH_LEFT));
+		key_chips[4]->setPin(4, isSwitchEnabled(BUTTON_SWITCH_RIGHT));
+		testAllButtons(&mm2);
+		delay(50);
+		testAllButtons(&mm2);
+		delay(50);
+		testAllButtons(&mm2);
+		delay(50);
+		testAllButtons(&mm2);
+		delay(50);
+		testAllButtons(&mm2);
+		delay(50);
+		testAllButtons(&mm2);
+		delay(50);
+		testAllButtons(&mm2);
+		delay(50);
+		testAllButtons(&mm2);
+		delay(50);
+		testAllButtons(&mm2);
+		delay(50);
+		testAllButtons(&mm2);
+		delay(50);
+		testAllButtons(&mm2);
+		delay(50);
+		testAllButtons(&mm2);
+		delay(50);
+		testAllButtons(&mm2);
+		delay(50);
+		testAllButtons(&mm2);
+		delay(50);
+		testAllButtons(&mm2);
+		delay(50);
+		print_led( led_top, isSwitchEnabled(BUTTON_SWITCH_LEFT) ? "1" : "0");
+		print_led( led_bottom, isSwitchEnabled(BUTTON_SWITCH_RIGHT) ? "1" : "0");
+		key_chips[4]->setPin(5, isSwitchEnabled(BUTTON_SWITCH_LEFT));
+		key_chips[4]->setPin(4, isSwitchEnabled(BUTTON_SWITCH_RIGHT));
+		delay(100);
+	}
 }
 
 #endif

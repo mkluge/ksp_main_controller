@@ -15,7 +15,7 @@ PCF8574::PCF8574(int address) {
 	this->last_debounced_data = 0;
 	this->last_error = 0;
 	this->last_update = 0;
-	this->input_mask = 0xff;
+	this->input_mask = 0x00;
 }
 
 void PCF8574::selfTest()
@@ -37,7 +37,10 @@ void PCF8574::selfTest()
 byte PCF8574::getCurrentSignal()
 {
 	Wire.requestFrom( this->chip_hw_address, 1);
-	int current_data = Wire.read();
+	// wait for data
+	while( !Wire.available() ) {};
+	// read byte
+	byte current_data = Wire.read();
 	return current_data;
 }
 
@@ -57,9 +60,9 @@ byte PCF8574::getInputMask() {
 // ist stable for a while, we use it as the new stable signal
 // and return the difference to the old stable signal
 byte PCF8574::updateState() {
+
 	byte current_data = getCurrentSignal();
 	// make bits that are used as outputs to show up as zeros
-	current_data &= input_mask;
 	if( last_data != current_data )
 	{
 		last_data = current_data;
@@ -90,17 +93,32 @@ byte PCF8574::getValue() {
 
 void PCF8574::write(byte value) {
 	Wire.beginTransmission(chip_hw_address);
-	last_debounced_data = value;
-	Wire.write(last_debounced_data);
+	last_debounced_data = value | input_mask;
+	Wire.write( last_debounced_data );
 	last_error = Wire.endTransmission();
 }
 
 bool PCF8574::testPin(short pin) {
-	return (last_debounced_data & (1 << pin)) > 0;
+	return (getCurrentSignal() & (1 << pin)) > 0;
 }
 
 void PCF8574::setPin(short pin, bool value) {
-	byte new_data = this->getCurrentSignal();
+
+	byte new_data;
+
+	if (value == false) {
+		new_data = last_debounced_data & ~(1 << pin);
+	} else {
+		new_data = last_debounced_data | (1 << pin);
+	}	
+	new_data |= input_mask;
+	this->write(new_data);
+	// update the current state
+	last_debounced_data = new_data;
+	last_data = last_debounced_data;
+	last_update = millis();
+
+/*
 	if (value == LOW) {
 		new_data &= ~(1 << pin);
 	} else {
@@ -115,6 +133,7 @@ void PCF8574::setPin(short pin, bool value) {
 	this->write(new_data);
 	last_debounced_data = new_data & input_mask;
 	this->updateState();
+*/
 }
 
 int PCF8574::lastError() {
