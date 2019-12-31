@@ -9,10 +9,10 @@
 #define ANALOGINPUT_H_
 
 #include "Arduino.h"
-#include "ArduinoJson.h"
 #include "mikemap.h"
 
 #define CHECK_LOOPS 100
+using namespace mikemap;
 
 class AnalogInput {
 public:

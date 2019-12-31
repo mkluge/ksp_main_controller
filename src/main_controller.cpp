@@ -17,10 +17,9 @@
 #define TEST
 #endif
 
-#define SERIAL_PORT Serial2
+#define SERIAL_PORT Serial
 
 #include <Arduino.h>
-#include <ArduinoJson.h>
 #include <AnalogInput.h>
 #include <LedControl.h>
 #include "ConsoleSetup.h"
@@ -28,6 +27,8 @@
 #include <Wire.h>
 #include "ksp_display_defines.h"
 #include "mikemap.h"
+
+using namespace mikemap;
 
 /*
  chip(pin)
@@ -55,7 +56,7 @@
 #define NO_PIN 9
 #define NO_CHIP 9
 #define NO_KEY -1
-#define READ_BUFFER_SIZE 300
+#define BUFFER_SIZE 300
 // some button indizes for easier handling
 #define STAGE_BUTTON_INDEX 0
 #define RCS_BUTTON_INDEX 1
@@ -64,13 +65,15 @@
 //#define LIGHT_BUTTON_INDEX 6
 //#define BRAKES_BUTTON_INDEX 7
 
-char read_buffer[READ_BUFFER_SIZE];
+char buffer[BUFFER_SIZE];
 unsigned int read_buffer_offset = 0;
 int empty_buffer_size = 0;
 bool have_handshake = false;
 bool stage_enabled = false;
 bool message_complete = false;
 bool interrupt_seen = false;
+char data_start[]="\"data\":[";
+char cmd_start[]="\"cmd\":";
 
 LedControl led_top(5, 7, 6, 1);
 LedControl led_bottom(2, 4, 3, 1);
@@ -86,6 +89,8 @@ LedControl led_bottom(2, 4, 3, 1);
 MikeMap key_updates;
 /* memorizes data that will be send to display */
 MikeMap display_updates;
+/* input from python to us */
+MikeMap input_data;
 
 int action_group_buttons[10] = {
 	BUTTON_ACTION_1, BUTTON_ACTION_2, BUTTON_ACTION_3, BUTTON_ACTION_4,
@@ -147,24 +152,25 @@ PCF8574 *light_chips[NUM_LIGHT_CHIPS] = {
 	*pin = lpin;  \
 	return true;
 
+namespace {
+
 void dieError(int code);
 void reset_serial_buffer();
-void sendToSlave(const JsonDocument &message);
 void read_console_updates(MikeMap *updates);
 bool isSwitchEnabled(int key);
 
-int min_freeRam = 0;
-
+/*
 int freeRam()
 {
-	extern int __heap_start, *__brkval;
-	int v;
-	return (int)&v - (__brkval == 0 ? (int)&__heap_start : (int)__brkval);
+       extern int __heap_start, *__brkval;
+       int v;
+       return (int)&v - (__brkval == 0 ? (int)&__heap_start : (int)__brkval);
 }
+
+#define RAM if (freeRam()<500 ) dieError(22);
 //#define RAM min_freeRam = freeRam();
-#define RAM \
-	{       \
-	}
+//#define RAM { }
+*/
 
 bool getPinForKey(int key, uint8_t *chip, uint8_t *pin)
 {
@@ -383,18 +389,6 @@ bool getLightFromKey(int key, uint8_t *chip, uint8_t *pin)
 	return false;
 }
 
-signed int check_for_key(const JsonArray &data, short key)
-{
-	for (size_t index = 0; index < data.size(); index += 2)
-	{
-		if (data[index] == key)
-		{
-			return index;
-		}
-	}
-	return KEY_NOT_FOUND;
-}
-
 void setupLC(LedControl &lc, int intensity)
 {
 	lc.shutdown(0, false);		   // turn off power saving, enables display
@@ -495,95 +489,9 @@ bool isSwitchEnabled(int key)
 	return (key_chips[chip]->testPin(pin) == false);
 }
 
-#ifndef TEST
-
-void setup()
-{
-
-	//#ifndef NO_DISPLAYS
-	Wire.begin();
-//#endif
-#ifdef PRINT_DEBUG
-	Test::run();
-#endif
-	key_updates.clear();
-	display_updates.clear();
-	setupLC(led_top, 15);
-	setupLC(led_bottom, 3);
-	print_led(led_top, 88888888);
-	print_led(led_bottom, 88888888);
-	delay(1000);
-	print_led(led_top, "        ");
-	print_led(led_bottom, "        ");
-	for (const auto &i : analog_inputs)
-	{
-		i->calibrate();
-	}
-
-	// to act as input, all outputs have to be on HIGH
-	for (const auto &kc : key_chips)
-	{
-		kc->write(0xFF);
-	}
-	for (const auto &lc : light_chips)
-	{
-		lc->setInputMask(0x00);
-		lc->write(0xff);
-	}
-
-	delay(1000);
-	print_led(led_top, "        ");
-	print_led(led_bottom, "        ");
-	// first 4 chips have all pins as inputs
-	key_chips[0]->setInputMask(0xff);
-	key_chips[1]->setInputMask(0xff);
-	key_chips[2]->setInputMask(0xff);
-	key_chips[3]->setInputMask(0xff);
-	for (PCF8574 *lc : light_chips)
-	{
-		lc->write(0x00);
-	}
-
-	// set input mask for chip 4, all inputs except
-	// unset bits 4 and 5 for the two leds
-	byte kc5_mask = 0xff;
-	kc5_mask &= ~(1 << 4);
-	kc5_mask &= ~(1 << 5);
-	key_chips[4]->setInputMask(kc5_mask);
-	// turn off the two leds
-	// LED rechts
-	key_chips[4]->setPin(4, 0);
-	// LED links
-	key_chips[4]->setPin(5, 0);
-
-	// i2c Bus input??
-	pinMode(19, INPUT);
-	// wait for the i2c slave to initialize
-	delay(100);
-
-#ifndef NO_DISPLAYS
-	// send init to display
-	// this should also give us the initial
-	// reply from the display controller to get the thing going
-	DynamicJsonDocument root(DISPLAY_WIRE_BUFFER_SIZE);
-	root["chk"] = 1;
-	sendToSlave(root);
-#endif
-
-	SERIAL_PORT.begin(115200);
-	empty_buffer_size = SERIAL_PORT.availableForWrite();
-	print_led(led_bottom, "- - -");
-
-#ifdef PRINT_DEBUG
-	SERIAL_PORT.println(F("setup ende"));
-#endif
-}
-
-#endif
-
 void reset_serial_buffer()
 {
-	memset(read_buffer, 0, READ_BUFFER_SIZE);
+	memset(buffer, 0, BUFFER_SIZE);
 	read_buffer_offset = 0;
 	message_complete = false;
 }
@@ -601,9 +509,9 @@ int serial_read_until(char delimiter)
 			{
 				break;
 			}
-			if (read_buffer_offset < (READ_BUFFER_SIZE - 2))
+			if (read_buffer_offset < (BUFFER_SIZE - 2))
 			{
-				read_buffer[read_buffer_offset] = (char)inByte;
+				buffer[read_buffer_offset] = (char)inByte;
 				read_buffer_offset++;
 			}
 			else
@@ -612,7 +520,7 @@ int serial_read_until(char delimiter)
 			}
 		}
 	}
-	read_buffer[read_buffer_offset] = 0;
+	buffer[read_buffer_offset] = 0;
 	message_complete = true;
 	return bytes_read;
 }
@@ -688,12 +596,11 @@ void setLightPin(int key, bool state)
 	}
 }
 
-void check_action_groups_enabled(const JsonArray &data)
+void check_action_groups_enabled(MikeMap *data)
 {
-	auto index = check_for_key(data, INFO_ACTION_GROUPS);
-	if (index != KEY_NOT_FOUND)
+	if ( data->has(INFO_ACTION_GROUPS))
 	{
-		int status = data[index + 1];
+		int status = data->get(INFO_ACTION_GROUPS);
 		int mask = 1;
 		for (int bit = 0; bit < 10; bit++)
 		{
@@ -703,17 +610,16 @@ void check_action_groups_enabled(const JsonArray &data)
 	}
 }
 
-void check_button_enabled(const JsonArray &data, unsigned short key)
+void check_button_enabled(MikeMap *data, unsigned short key)
 {
-	auto index = check_for_key(data, key);
-	if (index != KEY_NOT_FOUND)
+	if ( data->has(key) )
 	{
-		bool state = data[index + 1] == 1 ? true : false;
+		bool state = data->get(key) == 1 ? true : false;
 		setLightPin(key, state);
 	}
 }
 
-void update_console(const JsonArray &data)
+void update_console(MikeMap *data)
 {
 	//	static unsigned long last_display_update = 0;
 
@@ -726,22 +632,11 @@ void update_console(const JsonArray &data)
 	check_action_groups_enabled(data);
 
 	read_console_updates(&key_updates);
-	auto index = check_for_key(data, INFO_SPEED);
-	if (index != KEY_NOT_FOUND)
-	{
-		print_led(led_top, (long)data[index + 1]);
-		//		data.remove(index+1);
-		//		data.remove(index);
-	}
-
+	if( data->has(INFO_SPEED) )
+		print_led(led_top, data->get(INFO_SPEED));
+	if( data->has(INFO_HEIGHT) )
+		print_led(led_bottom, data->get(INFO_HEIGHT));
 	read_console_updates(&key_updates);
-	index = check_for_key(data, INFO_HEIGHT);
-	if (index != KEY_NOT_FOUND)
-	{
-		print_led(led_bottom, (long)data[index + 1]);
-		//		data.remove(index+1);
-		//		data.remove(index);
-	}
 
 #ifndef NO_DISPLAYS
 	// put stuff into display_updates
@@ -772,6 +667,7 @@ void update_console(const JsonArray &data)
 			data.add(k);
 			data.add(v);
 			RAM;
+			
 		}
 		display_updates.clear();
 		DynamicJsonDocument root(DISPLAY_WIRE_BUFFER_SIZE);
@@ -806,63 +702,144 @@ void read_console_updates(MikeMap *updates)
 	}
 }
 
+} // end of namespace
+
+/* main setup and loop function */
 #ifndef TEST
+
+void setup()
+{
+	Wire.begin();
+#ifdef PRINT_DEBUG
+	Test::run();
+#endif
+	key_updates.clear();
+	display_updates.clear();
+	input_data.clear();
+
+	setupLC(led_top, 15);
+	setupLC(led_bottom, 3);
+	print_led(led_top, 88888888);
+	print_led(led_bottom, 88888888);
+	delay(1000);
+	print_led(led_top, "        ");
+	print_led(led_bottom, "        ");
+	for (const auto &i : analog_inputs)
+	{
+		i->calibrate();
+	}
+
+	// to act as input, all outputs have to be on HIGH
+	for (const auto &kc : key_chips)
+	{
+		kc->write(0xFF);
+	}
+	for (const auto &lc : light_chips)
+	{
+		lc->setInputMask(0x00);
+		lc->write(0xff);
+	}
+
+	delay(1000);
+	print_led(led_top, "        ");
+	print_led(led_bottom, "        ");
+	// first 4 chips have all pins as inputs
+	key_chips[0]->setInputMask(0xff);
+	key_chips[1]->setInputMask(0xff);
+	key_chips[2]->setInputMask(0xff);
+	key_chips[3]->setInputMask(0xff);
+	for (PCF8574 *lc : light_chips)
+	{
+		lc->write(0x00);
+	}
+
+	// set input mask for chip 4, all inputs except
+	// unset bits 4 and 5 for the two leds
+	byte kc5_mask = 0xff;
+	kc5_mask &= ~(1 << 4);
+	kc5_mask &= ~(1 << 5);
+	key_chips[4]->setInputMask(kc5_mask);
+	// turn off the two leds
+	// LED rechts
+	key_chips[4]->setPin(4, 0);
+	// LED links
+	key_chips[4]->setPin(5, 0);
+
+	// i2c Bus input??
+	pinMode(19, INPUT);
+	// wait for the i2c slave to initialize
+	delay(100);
+
+#ifndef NO_DISPLAYS
+	// send init to display
+	// this should also give us the initial
+	// reply from the display controller to get the thing going
+//	DynamicJsonDocument root(DISPLAY_WIRE_BUFFER_SIZE);
+	root["chk"] = 1;
+	sendToSlave(root);
+#endif
+
+	SERIAL_PORT.begin(115200);
+	empty_buffer_size = SERIAL_PORT.availableForWrite();
+	print_led(led_bottom, "- - -");
+
+#ifdef PRINT_DEBUG
+	SERIAL_PORT.println(F("setup ende"));
+#endif
+}
 
 void loop()
 {
 	check_serial_port();
 	if (message_complete == true)
 	{
+		char *cmd_ptr;
 		read_console_updates(&key_updates);
-		DynamicJsonDocument rj(READ_BUFFER_SIZE);
-		read_console_updates(&key_updates);
-		DeserializationError error = deserializeJson(rj, read_buffer);
-		read_console_updates(&key_updates);
-		if (error)
+		// get cmd _from string
+		if( (cmd_ptr = strstr( buffer, cmd_start))==NULL )
 		{
 			dieError(2);
 		}
 		else
 		{
-			if (!rj.containsKey("cmd"))
-			{
-				dieError(7);
-			}
-			if (rj["cmd"] == CMD_GET_UPDATES)
+			// jmp over
+			cmd_ptr += 6;
+			int command = atoi(cmd_ptr);
+			if (command == CMD_GET_UPDATES)
 			{
 				read_console_updates(&key_updates);
-				DynamicJsonDocument root(READ_BUFFER_SIZE);
-				JsonArray data = root.createNestedArray("data");
-				read_console_updates(&key_updates);
-				// read all updates and put them into the updates
-				for (unsigned int i = 0; i < key_updates.get_len(); i++)
-				{
-					MAP_KEY_TYPE k;
-					MAP_VALUE_TYPE v;
-					key_updates.get_at(i, &k, &v);
-					data.add(k);
-					data.add(v);
-					RAM;
-				}
-				//				root["fr"] = min_freeRam;
-				//				root["tr"] = ai7.readValue();
-				//				root["ro"] = ai3.readValue();
+				memset( buffer, 0, BUFFER_SIZE);
+				strcpy( buffer, "{\"data\":[");
+				int l = strlen(buffer);
+				key_updates.to_string(&buffer[l]);
+				l = strlen(buffer);
+				strcpy( &buffer[l], "]}\n");
 				key_updates.clear();
 				read_console_updates(&key_updates);
-				serializeJson(root, SERIAL_PORT);
-				SERIAL_PORT.print('\n');
+				SERIAL_PORT.print(buffer);
 				SERIAL_PORT.flush();
 			}
-			else if (rj["cmd"] == CMD_UPDATE_CONSOLE)
+			else if (command == CMD_UPDATE_CONSOLE)
 			{
-				update_console(rj["data"]);
+				char *data_ptr;
+				if( (data_ptr=strstr( buffer, data_start))==NULL )
+				{
+					dieError(33);
+				}
+				input_data.from_string( buffer, data_start);
+				update_console(&input_data);
 			}
-			else if (rj["cmd"] == CMD_INIT)
+			else if (command == CMD_INIT)
 			{
 				print_led(led_top, "      - ");
 				print_led(led_bottom, "      - ");
 				have_handshake = true;
 			}
+			else
+			{
+				dieError(44);
+			}
+			
 		}
 		reset_serial_buffer();
 	}
@@ -909,7 +886,7 @@ void loop()
 void setup()
 {
 	for (const auto &i : analog_inputs)
-	{
+	
 		i->calibrate();
 	}
 

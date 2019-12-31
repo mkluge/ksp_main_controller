@@ -1,4 +1,7 @@
 #include "mikemap.h"
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 
 #ifdef TEST_MIKEMAP
 #include <assert.h>
@@ -57,33 +60,35 @@ int main(int argc, char* argv[])
  }
 #endif
 
+namespace mikemap {
+
 MikeMap::MikeMap()
 {
-  this->len=0;
+  mikemap_len=0;
 }
 
 void MikeMap::set( MAP_KEY_TYPE key, MAP_VALUE_TYPE value)
 {
-  for( unsigned int i=0; i<this->len; i++)
+  for( unsigned int i=0; i<mikemap_len; i++)
   {
-    if( this->keys[i]==key)
+    if( mikemap_keys[i]==key)
     {
-      this->values[i]=value;
+      mikemap_values[i]=value;
       return;
     }
   }
-  if( this->len==MAX_MAP_LEN )
+  if( mikemap_len==MAX_MAP_LEN )
     return;
-  this->keys[len]=key;
-  this->values[len]=value;
-  this->len++;
+  mikemap_keys[mikemap_len]=key;
+  mikemap_values[mikemap_len]=value;
+  mikemap_len++;
 }
 
 bool MikeMap::has( MAP_KEY_TYPE key) const
 {
-  for( unsigned int i=0; i<this->len; i++)
+  for( unsigned int i=0; i<mikemap_len; i++)
   {
-    if( this->keys[i]==key)
+    if( mikemap_keys[i]==key)
     {
       return true;
     }
@@ -93,28 +98,73 @@ bool MikeMap::has( MAP_KEY_TYPE key) const
 
 MAP_VALUE_TYPE MikeMap::get( MAP_KEY_TYPE key) const
 {
-  for( unsigned int i=0; i<this->len; i++)
+  for( unsigned int i=0; i<mikemap_len; i++)
   {
-    if( this->keys[i]==key)
+    if( mikemap_keys[i]==key)
     {
-      return this->values[i];
+      return mikemap_values[i];
     }
   }
   return 0;
 }
 
+void MikeMap::to_string( char *ptr)
+{
+  int offset=0;
+  for( unsigned int i=0; i<mikemap_len; i++)
+  {
+	if( i>0 )
+	{
+		ptr[offset]=',';
+		offset++;
+	}
+	offset += sprintf( &ptr[offset], "%d", mikemap_keys[i]);
+	ptr[offset]=',';
+	offset++;
+	offset += sprintf( &ptr[offset], "%ld", mikemap_values[i]);
+  }
+}
+
+void MikeMap::from_string( char *ptr, const char *data_start)
+{
+	this->clear();
+	char *data_ptr;
+	char *key;
+	char *val;
+
+	if( (data_ptr=strstr( ptr, data_start))==NULL )
+	{
+		return;
+	}
+	data_ptr+=8;
+
+	key = strtok( data_ptr, ",");
+	while(1)
+	{
+		if(key==NULL)
+			break;
+		val = strtok( NULL, ",");
+		if(val==NULL)
+			break;
+		this->set( atoi(key), atoi(val));
+		if (strchr( val, ']'))
+			break;
+		key = strtok( NULL, ",");
+    }
+}
+
 void MikeMap::del( MAP_KEY_TYPE key)
 {
-  for( unsigned int i=0; i<this->len; i++)
+  for( unsigned int i=0; i<mikemap_len; i++)
   {
-    if( this->keys[i]==key)
+    if( mikemap_keys[i]==key)
     {
-      for( unsigned int si=i; si<(this->len-1); si++)
+      for( int si=i; si<(mikemap_len-1); si++)
       {
-        this->keys[si]   = this->keys[si+1];
-        this->values[si] = this->values[si+1];
+        mikemap_keys[si]   = mikemap_keys[si+1];
+        mikemap_values[si] = mikemap_values[si+1];
       }
-      this->len--;
+      mikemap_len--;
       return;
     }
   }
@@ -122,19 +172,21 @@ void MikeMap::del( MAP_KEY_TYPE key)
 
 unsigned int MikeMap::get_len() const
 {
-  return this->len;
+  return mikemap_len;
 }
 
 void MikeMap::clear()
 {
-  this->len=0;
+  mikemap_len=0;
 }
 
 void MikeMap::get_at( unsigned int at, MAP_KEY_TYPE *key, MAP_VALUE_TYPE *value) const
 {
-  if( at<this->len )
+  if( at<mikemap_len )
   {
-    *key=this->keys[at];
-    *value=this->values[at];
+    *key=mikemap_keys[at];
+    *value=mikemap_values[at];
   }
+}
+
 }
