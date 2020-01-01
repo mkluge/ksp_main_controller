@@ -2,8 +2,7 @@
 #undef PRINT_DEBUG
 #undef SERIAL_TEST
 #undef KEY_TEST
-
-#define NO_DISPLAYS
+#undef NO_DISPLAYS
 
 #ifdef ANALOG_TEST
 #define TEST
@@ -74,6 +73,8 @@ bool message_complete = false;
 bool interrupt_seen = false;
 char data_start[]="\"data\":[";
 char cmd_start[]="\"cmd\":";
+char display_start[]="\"disp\":[";
+char disp_init[]="{\"chk\":1}\n";
 
 LedControl led_top(5, 7, 6, 1);
 LedControl led_bottom(2, 4, 3, 1);
@@ -548,28 +549,16 @@ void check_serial_port()
 
 void dieError(int code)
 {
-	print_led(led_top, "Error:");
+	print_led(led_top, "E");
 	print_led(led_bottom, code);
 	while (44)
 		;
 }
 
-#ifndef NO_DISPLAYS
-// warning: this thing just sends, it does not care about
-// the protocoll (the 77 coming back as "ready to receive")
-void sendToSlave(const JsonDocument &message)
+#ifndef NO_DISPLAY
+void sendToDisplay(char *ptr)
 {
-
-	char buf[DISPLAY_WIRE_BUFFER_SIZE];
-	int len = serializeJson(message, buf);
-	buf[len] = '\n';
-	len++;
-	//	print_led(&led_bottom, len);
-	if (len >= DISPLAY_WIRE_BUFFER_SIZE)
-	{
-		dieError(45);
-	}
-	char *ptr = buf;
+	int len=strlen(ptr);
 	// need to send in 32 byte chunks
 	//	print_led(&led_top, len);
 	while (len > 0)
@@ -637,45 +626,6 @@ void update_console(MikeMap *data)
 	if( data->has(INFO_HEIGHT) )
 		print_led(led_bottom, data->get(INFO_HEIGHT));
 	read_console_updates(&key_updates);
-
-#ifndef NO_DISPLAYS
-	// put stuff into display_updates
-	for (const auto &key : display_keys)
-	{
-		index = check_for_key(data, key);
-		if (index != KEY_NOT_FOUND)
-		{
-			display_updates.set(data[index], data[index + 1]);
-		}
-	}
-
-	// send stuff to slave, if the slave is ok with this
-	// it is OK, if we have a byte on the wire waiting
-	if (Wire.available() > 0 && display_updates.get_len() > 0)
-	{
-		byte b = Wire.read();
-		if (b != 77)
-		{
-			dieError(88);
-		}
-		// OK, send
-		for (unsigned int i = 0; i < display_updates.get_len(); i++)
-		{
-			MAP_KEY_TYPE k;
-			MAP_VALUE_TYPE v;
-			display_updates.get_at(i, &k, &v);
-			data.add(k);
-			data.add(v);
-			RAM;
-			
-		}
-		display_updates.clear();
-		DynamicJsonDocument root(DISPLAY_WIRE_BUFFER_SIZE);
-		root["data"] = data;
-		sendToSlave(root);
-		RAM;
-	}
-#endif
 }
 
 void read_console_updates(MikeMap *updates)
@@ -775,8 +725,7 @@ void setup()
 	// this should also give us the initial
 	// reply from the display controller to get the thing going
 //	DynamicJsonDocument root(DISPLAY_WIRE_BUFFER_SIZE);
-	root["chk"] = 1;
-	sendToSlave(root);
+	sendToDisplay(disp_init);
 #endif
 
 	SERIAL_PORT.begin(115200);
@@ -828,6 +777,38 @@ void loop()
 				}
 				input_data.from_string( buffer, data_start);
 				update_console(&input_data);
+			}
+			else if (command == CMD_UPDATE_DISPLAY)
+			{
+				char *data_ptr;
+				if( (data_ptr=strstr( buffer, display_start))==NULL )
+				{
+					dieError(55);
+				}
+				// check that the display is ready
+				// this means that we have a byte waiting
+				// if display is not ready - ignore update
+				if (Wire.available() > 0)
+				{
+					byte b = Wire.read();
+					if (b != 77)
+					{
+						dieError(88);
+					}
+					data_ptr += strlen(display_start);
+					char send_buf[BUFFER_SIZE];
+					char *send_buf_ptr=send_buf;
+					while( *data_ptr!=']' )
+					{
+						*send_buf_ptr = *data_ptr;
+						send_buf_ptr++;
+						data_ptr++;
+					}
+					*send_buf_ptr='\n';
+					send_buf_ptr++;
+					*send_buf_ptr=0;
+					sendToDisplay(send_buf);
+				}
 			}
 			else if (command == CMD_INIT)
 			{

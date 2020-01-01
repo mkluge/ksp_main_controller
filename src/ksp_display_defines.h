@@ -63,6 +63,7 @@
 #define CMD_GET_UPDATES 109
 #define CMD_UPDATE_CONSOLE 110
 #define CMD_INIT 111
+#define CMD_UPDATE_DISPLAY 112
 
 unsigned int display_keys[8]={
 	INFO_APOAPSIS_TIME,
