@@ -88,10 +88,11 @@ LedControl led_bottom(2, 4, 3, 1);
 
 /* memorizes pressed buttons until stuff can be sent to master */
 MikeMap key_updates;
-/* memorizes data that will be send to display */
-MikeMap display_updates;
 /* input from python to us */
 MikeMap input_data;
+
+// remember, if "next display button was pressed"
+bool next_display_button=false;
 
 int action_group_buttons[10] = {
 	BUTTON_ACTION_1, BUTTON_ACTION_2, BUTTON_ACTION_3, BUTTON_ACTION_4,
@@ -465,7 +466,7 @@ void testAllButtons(MikeMap *updates)
 							// remember buttons that trigger the display controller directly
 							if (key == BUTTON_NEXT_LEFT_TFT_MODE)
 							{
-								display_updates.set(BUTTON_NEXT_LEFT_TFT_MODE, 1);
+								next_display_button=true;
 							}
 						}
 					}
@@ -664,7 +665,6 @@ void setup()
 	Test::run();
 #endif
 	key_updates.clear();
-	display_updates.clear();
 	input_data.clear();
 
 	setupLC(led_top, 15);
@@ -798,15 +798,24 @@ void loop()
 					data_ptr += strlen(display_start);
 					char send_buf[BUFFER_SIZE];
 					char *send_buf_ptr=send_buf;
+					// prepend info for the "next display" button if required
+					if( next_display_button==true )
+					{
+						send_buf_ptr+=sprintf(send_buf, "%d,1", BUTTON_NEXT_LEFT_TFT_MODE);
+						next_display_button=false;
+					}
+					// copy string
 					while( *data_ptr!=']' )
 					{
 						*send_buf_ptr = *data_ptr;
 						send_buf_ptr++;
 						data_ptr++;
 					}
+					// terminate it correctly
 					*send_buf_ptr='\n';
 					send_buf_ptr++;
 					*send_buf_ptr=0;
+					// send
 					sendToDisplay(send_buf);
 				}
 			}
