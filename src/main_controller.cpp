@@ -28,6 +28,8 @@
 #include "mikemap.h"
 
 using namespace mikemap;
+using namespace analoginput;
+
 
 /*
  chip(pin)
@@ -49,32 +51,21 @@ using namespace mikemap;
 
  */
 
+namespace {
+
 #define NUM_ANALOG_BUTTONS 7
 #define NUM_KEY_CHIPS 5
 #define NUM_LIGHT_CHIPS 2
-#define NO_PIN 9
-#define NO_CHIP 9
 #define NO_KEY -1
-#define BUFFER_SIZE 300
-// some button indizes for easier handling
-#define STAGE_BUTTON_INDEX 0
-#define RCS_BUTTON_INDEX 1
-#define SAS_BUTTON_INDEX 2
-#define GEAR_BUTTON_INDEX 3
-//#define LIGHT_BUTTON_INDEX 6
-//#define BRAKES_BUTTON_INDEX 7
+#define BUFFER_SIZE 400
 
-char buffer[BUFFER_SIZE];
+char receive_buffer[BUFFER_SIZE];
+char send_buf[BUFFER_SIZE];
+
 unsigned int read_buffer_offset = 0;
-int empty_buffer_size = 0;
 bool have_handshake = false;
 bool stage_enabled = false;
 bool message_complete = false;
-bool interrupt_seen = false;
-char data_start[]="\"data\":[";
-char cmd_start[]="\"cmd\":";
-char display_start[]="\"disp\":[";
-char disp_init[]="{\"chk\":1}\n";
 
 LedControl led_top(5, 7, 6, 1);
 LedControl led_bottom(2, 4, 3, 1);
@@ -154,12 +145,13 @@ PCF8574 *light_chips[NUM_LIGHT_CHIPS] = {
 	*pin = lpin;  \
 	return true;
 
-namespace {
-
 void dieError(int code);
 void reset_serial_buffer();
 void read_console_updates(MikeMap *updates);
 bool isSwitchEnabled(int key);
+
+#define TEST9(code) \
+	if( key_updates.has(BUTTON_RCS)) dieError(code);
 
 /*
 int freeRam()
@@ -440,11 +432,9 @@ void print_led(LedControl &target, const char *str)
  */
 void testAllButtons(MikeMap *updates)
 {
-	// update chips
-	int chip_index = 0;
-
-	for (PCF8574 *pcf8754 : key_chips)
+	for( int chip_index=0; chip_index<NUM_KEY_CHIPS; chip_index++)
 	{
+		PCF8574 *pcf8754 = key_chips[chip_index];
 		byte changed_bits = pcf8754->updateState();
 		if (changed_bits != 0x00)
 		{
@@ -475,7 +465,6 @@ void testAllButtons(MikeMap *updates)
 				changed_bits >>= 1;
 			}
 		}
-		chip_index++;
 	}
 }
 
@@ -493,7 +482,7 @@ bool isSwitchEnabled(int key)
 
 void reset_serial_buffer()
 {
-	memset(buffer, 0, BUFFER_SIZE);
+	memset(receive_buffer, 0, BUFFER_SIZE);
 	read_buffer_offset = 0;
 	message_complete = false;
 }
@@ -513,7 +502,7 @@ int serial_read_until(char delimiter)
 			}
 			if (read_buffer_offset < (BUFFER_SIZE - 2))
 			{
-				buffer[read_buffer_offset] = (char)inByte;
+				receive_buffer[read_buffer_offset] = (char)inByte;
 				read_buffer_offset++;
 			}
 			else
@@ -522,7 +511,7 @@ int serial_read_until(char delimiter)
 			}
 		}
 	}
-	buffer[read_buffer_offset] = 0;
+	receive_buffer[read_buffer_offset] = 0;
 	message_complete = true;
 	return bytes_read;
 }
@@ -550,13 +539,13 @@ void check_serial_port()
 
 void dieError(int code)
 {
-	print_led(led_top, "E");
+	print_led(led_top, "E E E E ");
 	print_led(led_bottom, code);
 	while (44)
 		;
 }
 
-#ifndef NO_DISPLAY
+#ifndef NO_DISPLAYS
 void sendToDisplay(char *ptr)
 {
 	int len=strlen(ptr);
@@ -614,14 +603,14 @@ void update_console(MikeMap *data)
 	//	static unsigned long last_display_update = 0;
 
 	read_console_updates(&key_updates);
+	TEST9(1);
 	check_button_enabled(data, BUTTON_RCS);
 	check_button_enabled(data, BUTTON_SAS);
 	check_button_enabled(data, BUTTON_GEAR);
-	//	check_button_enabled( rj, BUTTON_LIGHTS, LIGHT_BUTTON_INDEX);
-	//	check_button_enabled( rj, BUTTON_BREAKS, BRAKES_BUTTON_INDEX);
 	check_action_groups_enabled(data);
 
 	read_console_updates(&key_updates);
+	TEST9(2);
 	if( data->has(INFO_SPEED) )
 		print_led(led_top, data->get(INFO_SPEED));
 	if( data->has(INFO_HEIGHT) )
@@ -631,11 +620,13 @@ void update_console(MikeMap *data)
 
 void read_console_updates(MikeMap *updates)
 {
-	for (AnalogInput *ai : analog_inputs)
+	for( int i=0; i<NUM_ANALOG_BUTTONS; i++)
 	{
-		ai->readInto(updates, false);
+		analog_inputs[i]->readInto(updates, false);
 	}
+	TEST9(8);
 	testAllButtons(updates);
+	TEST9(9);
 	// there are two special buttons :)
 	// the two switches on the right top
 
@@ -643,14 +634,17 @@ void read_console_updates(MikeMap *updates)
 	key_chips[4]->setPin(4, value);
 	light_chips[0]->setPin(0, value);
 	stage_enabled = value;
+	TEST9(10);
 
 	key_chips[4]->setPin(5, isSwitchEnabled(BUTTON_SWITCH_LEFT));
+	TEST9(11);
 
 	// let "stage" only pass if staging is enabled
 	if (updates->get(BUTTON_STAGE) && stage_enabled == false)
 	{
 		updates->del(BUTTON_STAGE);
 	}
+	TEST9(12);
 }
 
 } // end of namespace
@@ -724,12 +718,10 @@ void setup()
 	// send init to display
 	// this should also give us the initial
 	// reply from the display controller to get the thing going
-//	DynamicJsonDocument root(DISPLAY_WIRE_BUFFER_SIZE);
 	sendToDisplay(disp_init);
 #endif
 
 	SERIAL_PORT.begin(115200);
-	empty_buffer_size = SERIAL_PORT.availableForWrite();
 	print_led(led_bottom, "- - -");
 
 #ifdef PRINT_DEBUG
@@ -744,44 +736,47 @@ void loop()
 	{
 		char *cmd_ptr;
 		read_console_updates(&key_updates);
+		TEST9(3);
 		// get cmd _from string
-		if( (cmd_ptr = strstr( buffer, cmd_start))==NULL )
+		if( (cmd_ptr = strstr( receive_buffer, cmd_start))==NULL )
 		{
 			dieError(2);
 		}
 		else
 		{
 			// jmp over
-			cmd_ptr += 6;
+			cmd_ptr += 6; // 6 == strlen(cmd_start)
 			int command = atoi(cmd_ptr);
 			if (command == CMD_GET_UPDATES)
 			{
 				read_console_updates(&key_updates);
-				memset( buffer, 0, BUFFER_SIZE);
-				strcpy( buffer, "{\"data\":[");
-				int l = strlen(buffer);
-				key_updates.to_string(&buffer[l]);
-				l = strlen(buffer);
-				strcpy( &buffer[l], "]}\n");
+				TEST9(4);
+				memset( receive_buffer, 0, BUFFER_SIZE);
+				strcpy( receive_buffer, "{\"data\":[");
+				int l = strlen(receive_buffer);
+				key_updates.to_string(&receive_buffer[l]);
+				l = strlen(receive_buffer);
+				strcpy( &receive_buffer[l], "]}\n");
 				key_updates.clear();
 				read_console_updates(&key_updates);
-				SERIAL_PORT.print(buffer);
+				TEST9(7);
+				SERIAL_PORT.print(receive_buffer);
 				SERIAL_PORT.flush();
 			}
 			else if (command == CMD_UPDATE_CONSOLE)
 			{
 				char *data_ptr;
-				if( (data_ptr=strstr( buffer, data_start))==NULL )
+				if( (data_ptr=strstr( receive_buffer, data_start))==NULL )
 				{
 					dieError(33);
 				}
-				input_data.from_string( buffer, data_start);
+				input_data.from_string( receive_buffer, data_start);
 				update_console(&input_data);
 			}
 			else if (command == CMD_UPDATE_DISPLAY)
 			{
 				char *data_ptr;
-				if( (data_ptr=strstr( buffer, display_start))==NULL )
+				if( (data_ptr=strstr( receive_buffer, display_start))==NULL )
 				{
 					dieError(55);
 				}
@@ -796,12 +791,13 @@ void loop()
 						dieError(88);
 					}
 					data_ptr += strlen(display_start);
-					char send_buf[BUFFER_SIZE];
-					char *send_buf_ptr=send_buf;
+					memset( send_buf, 0, BUFFER_SIZE);
+					strcpy( send_buf, disp_data_start);
+					char *send_buf_ptr=send_buf+strlen(send_buf);
 					// prepend info for the "next display" button if required
 					if( next_display_button==true )
 					{
-						send_buf_ptr+=sprintf(send_buf, "%d,1", BUTTON_NEXT_LEFT_TFT_MODE);
+						send_buf_ptr+=sprintf(send_buf, "%d,1,", BUTTON_NEXT_LEFT_TFT_MODE);
 						next_display_button=false;
 					}
 					// copy string
@@ -812,9 +808,7 @@ void loop()
 						data_ptr++;
 					}
 					// terminate it correctly
-					*send_buf_ptr='\n';
-					send_buf_ptr++;
-					*send_buf_ptr=0;
+					strcat( send_buf, "]}\n");
 					// send
 					sendToDisplay(send_buf);
 				}
@@ -863,6 +857,7 @@ void loop()
 	{
 		// check for pressed buttons anyway and store them
 		read_console_updates(&key_updates);
+		TEST9(6);
 	}
 }
 

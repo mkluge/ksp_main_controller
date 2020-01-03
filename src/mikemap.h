@@ -27,7 +27,7 @@ class MikeMap {
   private:
     MAP_KEY_TYPE mikemap_keys[MAX_MAP_LEN];
     MAP_VALUE_TYPE mikemap_values[MAX_MAP_LEN];
-    uint8_t mikemap_len;
+    size_t mikemap_len;
 };
 
 }

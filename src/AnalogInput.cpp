@@ -7,9 +7,11 @@
 
 #include "AnalogInput.h"
 
+namespace analoginput {
+
 AnalogInput::AnalogInput( unsigned short section_id, unsigned short pin, bool get_diff) {
 	this->section_id = section_id;
-	this->pin = pin;
+	this->chip_pin = pin;
 	this->last_value = 0;
 	this->reference_value = 0;
 	this->get_diff = get_diff;
@@ -46,5 +48,7 @@ void AnalogInput::readInto(MikeMap *m, bool only_on_diff) {
 }
 
 int AnalogInput::readValue() {
-	return analogRead(pin);
+	return analogRead(chip_pin);
+}
+
 }

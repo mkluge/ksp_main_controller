@@ -65,6 +65,8 @@ namespace mikemap {
 MikeMap::MikeMap()
 {
   mikemap_len=0;
+  memset( mikemap_keys, 0, sizeof(mikemap_keys));
+  memset( mikemap_values, 0, sizeof(mikemap_values));
 }
 
 void MikeMap::set( MAP_KEY_TYPE key, MAP_VALUE_TYPE value)
@@ -136,7 +138,7 @@ void MikeMap::from_string( char *ptr, const char *data_start)
 	{
 		return;
 	}
-	data_ptr+=8;
+	data_ptr+=8; // 8 == strlen(data_start)
 
 	key = strtok( data_ptr, ",");
 	while(1)
@@ -146,7 +148,7 @@ void MikeMap::from_string( char *ptr, const char *data_start)
 		val = strtok( NULL, ",");
 		if(val==NULL)
 			break;
-		this->set( atoi(key), atoi(val));
+		this->set( atol(key), atol(val));
 		if (strchr( val, ']'))
 			break;
 		key = strtok( NULL, ",");
@@ -159,11 +161,13 @@ void MikeMap::del( MAP_KEY_TYPE key)
   {
     if( mikemap_keys[i]==key)
     {
-      for( int si=i; si<(mikemap_len-1); si++)
+      for( unsigned int si=i; si<(mikemap_len-1); si++)
       {
         mikemap_keys[si]   = mikemap_keys[si+1];
         mikemap_values[si] = mikemap_values[si+1];
       }
+      mikemap_keys[mikemap_len] = 0;
+      mikemap_values[mikemap_len] = 0;
       mikemap_len--;
       return;
     }

@@ -14,6 +14,8 @@
 #define CHECK_LOOPS 100
 using namespace mikemap;
 
+namespace analoginput {
+
 class AnalogInput {
 public:
 	AnalogInput( unsigned short section_id, unsigned short pin, bool get_diff);
@@ -25,11 +27,13 @@ public:
 
 private:
 
-	unsigned short pin;
+	unsigned short chip_pin;
 	long reference_value;
 	int last_value;
 	unsigned short section_id;
 	bool get_diff;
 };
+
+}
 
 #endif /* ANALOGINPUT_H_ */
