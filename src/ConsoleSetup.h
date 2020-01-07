@@ -14,7 +14,7 @@
 //#define MAIN_CONTROLLER_I2C_ADDRESS 0x09
 #define KEY_NOT_FOUND -1
 
-#define DISPLAY_WIRE_BUFFER_SIZE 200
+#define DISPLAY_WIRE_BUFFER_SIZE 300
 
 char data_start[]="\"data\":[";
 char cmd_start[]="\"cmd\":";

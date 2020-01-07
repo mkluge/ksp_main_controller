@@ -3,6 +3,7 @@
 #undef SERIAL_TEST
 #undef KEY_TEST
 #undef NO_DISPLAYS
+#undef WIRE_TEST
 
 #ifdef ANALOG_TEST
 #define TEST
@@ -14,6 +15,12 @@
 
 #ifdef KEY_TEST
 #define TEST
+#endif
+
+#ifdef WIRE_TEST
+#define TEST
+#pragma GCC diagnostic warning "-Wunused-function"
+#pragma GCC diagnostic warning "-Wunused-variable"
 #endif
 
 #define SERIAL_PORT Serial
@@ -61,9 +68,9 @@ namespace {
 
 char receive_buffer[BUFFER_SIZE];
 char send_buf[BUFFER_SIZE];
+bool have_handshake = false;
 
 unsigned int read_buffer_offset = 0;
-bool have_handshake = false;
 bool stage_enabled = false;
 bool message_complete = false;
 
@@ -147,8 +154,12 @@ PCF8574 *light_chips[NUM_LIGHT_CHIPS] = {
 
 void dieError(int code);
 void reset_serial_buffer();
-void read_console_updates(MikeMap *updates);
 bool isSwitchEnabled(int key);
+void read_console_updates(MikeMap *updates);
+void check_action_groups_enabled(MikeMap *data);
+int serial_read_until(char delimiter);
+void check_button_enabled(MikeMap *data, unsigned short key);
+
 
 #define TEST9(code) \
 	if( key_updates.has(BUTTON_RCS)) dieError(code);
@@ -487,6 +498,27 @@ void reset_serial_buffer()
 	message_complete = false;
 }
 
+void check_serial_port()
+{
+	if (message_complete == true)
+	{
+		// not supposed to happen, that we have a complete
+		// message on board an not yet processed and another
+		// message arrives
+		dieError(88);
+		return;
+	}
+	// nothing is waiting, so just leave ...
+	if (!SERIAL_PORT.available())
+	{
+		return;
+	}
+	// if transmission has started, read until the delimiter
+	serial_read_until('+');
+	// send the serial ACK
+	SERIAL_PORT.print("OK");
+}
+
 int serial_read_until(char delimiter)
 {
 	int bytes_read = 0;
@@ -516,25 +548,22 @@ int serial_read_until(char delimiter)
 	return bytes_read;
 }
 
-void check_serial_port()
+void update_console(MikeMap *data)
 {
-	if (message_complete == true)
-	{
-		// not supposed to happen, that we have a complete
-		// message on board an not yet processed and another
-		// message arrives
-		dieError(88);
-		return;
-	}
-	// nothing is waiting, so just leave ...
-	if (!SERIAL_PORT.available())
-	{
-		return;
-	}
-	// if transmission has started, read until the delimiter
-	serial_read_until('+');
-	// send the serial ACK
-	SERIAL_PORT.print("OK");
+	//	static unsigned long last_display_update = 0;
+
+	read_console_updates(&key_updates);
+	check_button_enabled(data, BUTTON_RCS);
+	check_button_enabled(data, BUTTON_SAS);
+	check_button_enabled(data, BUTTON_GEAR);
+	check_action_groups_enabled(data);
+
+	read_console_updates(&key_updates);
+	if( data->has(INFO_SPEED) )
+		print_led(led_top, data->get(INFO_SPEED));
+	if( data->has(INFO_HEIGHT) )
+		print_led(led_bottom, data->get(INFO_HEIGHT));
+	read_console_updates(&key_updates);
 }
 
 void dieError(int code)
@@ -560,8 +589,8 @@ void sendToDisplay(char *ptr)
 		len -= send_len;
 		ptr += send_len;
 	}
-	// request the reply
-	Wire.requestFrom(DISPLAY_I2C_ADDRESS, 1);
+#ifndef WIRE_TEST
+#endif
 }
 #endif
 
@@ -598,35 +627,13 @@ void check_button_enabled(MikeMap *data, unsigned short key)
 	}
 }
 
-void update_console(MikeMap *data)
-{
-	//	static unsigned long last_display_update = 0;
-
-	read_console_updates(&key_updates);
-	TEST9(1);
-	check_button_enabled(data, BUTTON_RCS);
-	check_button_enabled(data, BUTTON_SAS);
-	check_button_enabled(data, BUTTON_GEAR);
-	check_action_groups_enabled(data);
-
-	read_console_updates(&key_updates);
-	TEST9(2);
-	if( data->has(INFO_SPEED) )
-		print_led(led_top, data->get(INFO_SPEED));
-	if( data->has(INFO_HEIGHT) )
-		print_led(led_bottom, data->get(INFO_HEIGHT));
-	read_console_updates(&key_updates);
-}
-
 void read_console_updates(MikeMap *updates)
 {
 	for( int i=0; i<NUM_ANALOG_BUTTONS; i++)
 	{
 		analog_inputs[i]->readInto(updates, false);
 	}
-	TEST9(8);
 	testAllButtons(updates);
-	TEST9(9);
 	// there are two special buttons :)
 	// the two switches on the right top
 
@@ -634,17 +641,14 @@ void read_console_updates(MikeMap *updates)
 	key_chips[4]->setPin(4, value);
 	light_chips[0]->setPin(0, value);
 	stage_enabled = value;
-	TEST9(10);
 
 	key_chips[4]->setPin(5, isSwitchEnabled(BUTTON_SWITCH_LEFT));
-	TEST9(11);
 
 	// let "stage" only pass if staging is enabled
 	if (updates->get(BUTTON_STAGE) && stage_enabled == false)
 	{
 		updates->del(BUTTON_STAGE);
 	}
-	TEST9(12);
 }
 
 } // end of namespace
@@ -736,7 +740,6 @@ void loop()
 	{
 		char *cmd_ptr;
 		read_console_updates(&key_updates);
-		TEST9(3);
 		// get cmd _from string
 		if( (cmd_ptr = strstr( receive_buffer, cmd_start))==NULL )
 		{
@@ -750,7 +753,6 @@ void loop()
 			if (command == CMD_GET_UPDATES)
 			{
 				read_console_updates(&key_updates);
-				TEST9(4);
 				memset( receive_buffer, 0, BUFFER_SIZE);
 				strcpy( receive_buffer, "{\"data\":[");
 				int l = strlen(receive_buffer);
@@ -759,7 +761,6 @@ void loop()
 				strcpy( &receive_buffer[l], "]}\n");
 				key_updates.clear();
 				read_console_updates(&key_updates);
-				TEST9(7);
 				SERIAL_PORT.print(receive_buffer);
 				SERIAL_PORT.flush();
 			}
@@ -786,31 +787,32 @@ void loop()
 				if (Wire.available() > 0)
 				{
 					byte b = Wire.read();
-					if (b != 77)
+					// 0 = slave not ready; 1 = slave ready
+					if (b == 1)
 					{
-						dieError(88);
+						data_ptr += strlen(display_start);
+						memset( send_buf, 0, BUFFER_SIZE);
+						strcpy( send_buf, disp_data_start);
+						char *send_buf_ptr=send_buf+strlen(send_buf);
+						// prepend info for the "next display" button if required
+						if( next_display_button==true )
+						{
+							send_buf_ptr+=sprintf(send_buf, "%d,1,", BUTTON_NEXT_LEFT_TFT_MODE);
+							next_display_button=false;
+						}
+						// copy string
+						while( *data_ptr!=']' )
+						{
+							*send_buf_ptr = *data_ptr;
+							send_buf_ptr++;
+							data_ptr++;
+						}
+						// terminate it correctly
+						strcat( send_buf, "]}+");
+						// send
+						sendToDisplay(send_buf);
 					}
-					data_ptr += strlen(display_start);
-					memset( send_buf, 0, BUFFER_SIZE);
-					strcpy( send_buf, disp_data_start);
-					char *send_buf_ptr=send_buf+strlen(send_buf);
-					// prepend info for the "next display" button if required
-					if( next_display_button==true )
-					{
-						send_buf_ptr+=sprintf(send_buf, "%d,1,", BUTTON_NEXT_LEFT_TFT_MODE);
-						next_display_button=false;
-					}
-					// copy string
-					while( *data_ptr!=']' )
-					{
-						*send_buf_ptr = *data_ptr;
-						send_buf_ptr++;
-						data_ptr++;
-					}
-					// terminate it correctly
-					strcat( send_buf, "]}\n");
-					// send
-					sendToDisplay(send_buf);
+					Wire.requestFrom(DISPLAY_I2C_ADDRESS, 1);
 				}
 			}
 			else if (command == CMD_INIT)
@@ -857,7 +859,6 @@ void loop()
 	{
 		// check for pressed buttons anyway and store them
 		read_console_updates(&key_updates);
-		TEST9(6);
 	}
 }
 
@@ -1037,6 +1038,106 @@ void loop()
 		key_chips[4]->setPin(5, isSwitchEnabled(BUTTON_SWITCH_LEFT));
 		key_chips[4]->setPin(4, isSwitchEnabled(BUTTON_SWITCH_RIGHT));
 		delay(100);
+	}
+}
+
+#endif
+
+#ifdef WIRE_TEST
+
+void setup()
+{
+	Wire.begin();
+	Wire.setTimeout(30000);
+
+#ifdef PRINT_DEBUG
+	Test::run();
+#endif
+	key_updates.clear();
+	input_data.clear();
+
+	setupLC(led_top, 15);
+	setupLC(led_bottom, 3);
+	print_led(led_top, 88888888);
+	print_led(led_bottom, 88888888);
+	delay(1000);
+	print_led(led_top, "        ");
+	print_led(led_bottom, "        ");
+	for (const auto &i : analog_inputs)
+	{
+		i->calibrate();
+	}
+
+	// to act as input, all outputs have to be on HIGH
+	for (const auto &kc : key_chips)
+	{
+		kc->write(0xFF);
+	}
+	for (const auto &lc : light_chips)
+	{
+		lc->setInputMask(0x00);
+		lc->write(0xff);
+	}
+
+	delay(1000);
+	print_led(led_top, "        ");
+	print_led(led_bottom, "        ");
+	// first 4 chips have all pins as inputs
+	key_chips[0]->setInputMask(0xff);
+	key_chips[1]->setInputMask(0xff);
+	key_chips[2]->setInputMask(0xff);
+	key_chips[3]->setInputMask(0xff);
+	for (PCF8574 *lc : light_chips)
+	{
+		lc->write(0x00);
+	}
+
+	// set input mask for chip 4, all inputs except
+	// unset bits 4 and 5 for the two leds
+	byte kc5_mask = 0xff;
+	kc5_mask &= ~(1 << 4);
+	kc5_mask &= ~(1 << 5);
+	key_chips[4]->setInputMask(kc5_mask);
+	// turn off the two leds
+	// LED rechts
+	key_chips[4]->setPin(4, 0);
+	// LED links
+	key_chips[4]->setPin(5, 0);
+
+	// i2c Bus input??
+	pinMode(19, INPUT);
+	// wait for the i2c slave to initialize
+	delay(100);
+
+	char cmd_buf[100];
+	sprintf( cmd_buf, "INIT+");
+	sendToDisplay(cmd_buf);
+	Wire.requestFrom(DISPLAY_I2C_ADDRESS, 1);
+
+	print_led(led_bottom, "- - -");
+
+}
+
+void loop()
+{
+	// master sends command to slave
+	// waits fot feedback, sends next command
+	// first command goes out in setup()
+	static int idle_loops=0;
+	print_led( led_top, idle_loops++);
+	print_led( led_bottom, 88);
+	if( Wire.available() )
+	{
+		const char c = Wire.read(); // receive a byte as character
+		if( c==1 )
+		{
+			char cmd_buf[100];
+			static int num_commands=0;
+			sprintf( cmd_buf, "CMD: %d+", num_commands++);
+			sendToDisplay(cmd_buf);
+			idle_loops=0;
+		}
+		Wire.requestFrom(DISPLAY_I2C_ADDRESS, 1);
 	}
 }
 
