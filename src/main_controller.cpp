@@ -723,6 +723,7 @@ void setup()
 	// this should also give us the initial
 	// reply from the display controller to get the thing going
 	sendToDisplay(disp_init);
+
 #endif
 
 	SERIAL_PORT.begin(115200);
@@ -776,6 +777,7 @@ void loop()
 			}
 			else if (command == CMD_UPDATE_DISPLAY)
 			{
+				Wire.requestFrom(DISPLAY_I2C_ADDRESS, 1);
 				char *data_ptr;
 				if( (data_ptr=strstr( receive_buffer, display_start))==NULL )
 				{
@@ -808,11 +810,10 @@ void loop()
 							data_ptr++;
 						}
 						// terminate it correctly
-						strcat( send_buf, "]}+");
+						strcat( send_buf, "]}\n");
 						// send
 						sendToDisplay(send_buf);
 					}
-					Wire.requestFrom(DISPLAY_I2C_ADDRESS, 1);
 				}
 			}
 			else if (command == CMD_INIT)
