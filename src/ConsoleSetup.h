@@ -16,12 +16,14 @@
 
 #define DISPLAY_WIRE_BUFFER_SIZE 300
 
-char data_start[]="\"data\":[";
-char cmd_start[]="\"cmd\":";
-char display_start[]="\"disp\":[";
-char disp_init[]="{\"chk\":1}\n";
-char disp_data_start[]="{\"data\":[";
+const char *data_start = "\"data\":";
+int data_start_len = 7;
+const char *cmd_start = "\"cmd\":";
+const char *display_start = "\"disp\":[";
+char disp_init[] = "{\"chk\":1}\n";
+const char *disp_data_start = "{\"data\":[";
 
+/*
 unsigned int display_keys[8]={
 	INFO_APOAPSIS_TIME,
 	INFO_SURFACE_HEIGHT,
@@ -32,5 +34,6 @@ unsigned int display_keys[8]={
 	INFO_PERCENTAGE_BATTERY,
 	BUTTON_NEXT_LEFT_TFT_MODE
 };
+*/
 
 #endif /* CONSOLESETUP_H_ */

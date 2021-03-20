@@ -28,7 +28,6 @@
 #include <Arduino.h>
 #include <AnalogInput.h>
 #include <LedControl.h>
-#include "ConsoleSetup.h"
 #include "PCF8574.h"
 #include <Wire.h>
 #include "ksp_display_defines.h"
@@ -59,6 +58,7 @@ using namespace analoginput;
 
 namespace
 {
+#include "ConsoleSetup.h"
 
 #define NUM_ANALOG_BUTTONS 7
 #define NUM_KEY_CHIPS 5
@@ -122,6 +122,12 @@ namespace
 
 	PCF8574 *light_chips[NUM_LIGHT_CHIPS] = {
 		&lc1, &lc2};
+
+//#define PDEBUG(X) print_led(led_top, X);
+#define PDEBUG(X) \
+	{             \
+	}
+#undef DEBUG_RUN
 
 #define KC1(kpin) \
 	*chip = 0;    \
@@ -513,19 +519,27 @@ int freeRam()
 		{
 			return;
 		}
+		reset_serial_buffer();
 		// if transmission has started, read until the delimiter
+		PDEBUG("D 40")
+
 		serial_read_until('+');
 		// send the serial ACK
 		SERIAL_PORT.print("OK");
+		PDEBUG("D 41")
 	}
 
 	int serial_read_until(char delimiter)
 	{
 		int bytes_read = 0;
+		int loop = 0;
 		while (1)
 		{
+			PDEBUG(loop)
+			loop++;
 			if (SERIAL_PORT.available())
 			{
+				PDEBUG("c 60")
 				char inByte = (char)SERIAL_PORT.read();
 				bytes_read++;
 				if (inByte == delimiter)
@@ -534,7 +548,7 @@ int freeRam()
 				}
 				if (read_buffer_offset < (BUFFER_SIZE - 2))
 				{
-					receive_buffer[read_buffer_offset] = (char)inByte;
+					receive_buffer[read_buffer_offset] = inByte;
 					read_buffer_offset++;
 				}
 				else
@@ -542,7 +556,18 @@ int freeRam()
 					dieError(99);
 				}
 			}
+#ifdef DEBUG_RUN
+			else
+			{
+				PDEBUG("c 52")
+				char tmp[20];
+				memcpy(tmp, &receive_buffer[read_buffer_offset - 8], 8);
+				tmp[8] = 0;
+				print_led(led_bottom, tmp);
+			}
+#endif
 		}
+		PDEBUG("c 51")
 		receive_buffer[read_buffer_offset] = 0;
 		message_complete = true;
 		return bytes_read;
@@ -551,7 +576,7 @@ int freeRam()
 	void update_console(MikeMap *data)
 	{
 		//	static unsigned long last_display_update = 0;
-
+		PDEBUG("P K")
 		read_console_updates(&key_updates);
 		check_button_enabled(data, BUTTON_RCS);
 		check_button_enabled(data, BUTTON_SAS);
@@ -559,11 +584,24 @@ int freeRam()
 		check_action_groups_enabled(data);
 
 		read_console_updates(&key_updates);
+		PDEBUG("P S")
 		if (data->has(INFO_SPEED))
-			print_led(led_top, data->get(INFO_SPEED));
+			print_led(led_top, (int)data->get(INFO_SPEED));
+		PDEBUG("P H")
 		if (data->has(INFO_HEIGHT))
-			print_led(led_bottom, data->get(INFO_HEIGHT));
+			print_led(led_bottom, (int)data->get(INFO_HEIGHT));
+		PDEBUG("P D")
 		read_console_updates(&key_updates);
+		PDEBUG("P E")
+	}
+
+	void dieCustomError(char *str1, char *str2)
+	{
+		print_led(led_top, str1);
+		print_led(led_bottom, str2);
+		while (44)
+		{
+		}
 	}
 
 	void dieError(int code)
@@ -571,7 +609,8 @@ int freeRam()
 		print_led(led_top, "E E E E ");
 		print_led(led_bottom, code);
 		while (44)
-			;
+		{
+		}
 	}
 
 #ifndef NO_DISPLAYS
@@ -736,23 +775,35 @@ void setup()
 
 void loop()
 {
+	PDEBUG("D 30")
 	check_serial_port();
+	PDEBUG("D 31")
 	if (message_complete == true)
 	{
 		char *cmd_ptr;
+		PDEBUG("D 1")
 		read_console_updates(&key_updates);
 		// get cmd _from string
+		PDEBUG("D 2")
 		if ((cmd_ptr = strstr(receive_buffer, cmd_start)) == NULL)
 		{
-			dieError(2);
+			// die and print first 8 chars of input buffer for debugging
+			receive_buffer[8] = 0;
+			print_led(led_top, receive_buffer);
+			print_led(led_bottom, "E 2");
+			while (1)
+			{
+			};
 		}
 		else
 		{
 			// jmp over
+			PDEBUG("D 3")
 			cmd_ptr += 6; // 6 == strlen(cmd_start)
 			int command = atoi(cmd_ptr);
 			if (command == CMD_GET_UPDATES)
 			{
+				PDEBUG("D 4")
 				read_console_updates(&key_updates);
 				memset(receive_buffer, 0, BUFFER_SIZE);
 				strcpy(receive_buffer, "{\"data\":[");
@@ -761,22 +812,38 @@ void loop()
 				l = strlen(receive_buffer);
 				strcpy(&receive_buffer[l], "]}\n");
 				key_updates.clear();
+				PDEBUG("D 5")
 				read_console_updates(&key_updates);
 				SERIAL_PORT.print(receive_buffer);
 				SERIAL_PORT.flush();
+				PDEBUG("D 6")
 			}
 			else if (command == CMD_UPDATE_CONSOLE)
 			{
+				PDEBUG("D 7")
 				char *data_ptr;
 				if ((data_ptr = strstr(receive_buffer, data_start)) == NULL)
 				{
 					dieError(33);
 				}
-				input_data.from_string(receive_buffer, data_start);
+				data_ptr += data_start_len;
+				int converted = 0;
+				int err = input_data.from_string(data_ptr, &converted);
+				if (err != MM_OK)
+				{
+					data_ptr[8] = 0;
+					char tmp[10];
+					sprintf(tmp, "E:%d S:%d", err, converted);
+					dieCustomError(data_ptr, tmp);
+				}
+				PDEBUG("D 8")
 				update_console(&input_data);
+				input_data.clear();
+				PDEBUG("D 18")
 			}
 			else if (command == CMD_UPDATE_DISPLAY)
 			{
+				PDEBUG("D 9")
 				Wire.requestFrom(DISPLAY_I2C_ADDRESS, 1);
 				char *data_ptr;
 				if ((data_ptr = strstr(receive_buffer, display_start)) == NULL)
@@ -788,6 +855,7 @@ void loop()
 				// if display is not ready - ignore update
 				if (Wire.available() > 0)
 				{
+					PDEBUG("D 10")
 					byte b = Wire.read();
 					// 0 = slave not ready; 1 = slave ready
 					if (b == 1)
@@ -811,7 +879,8 @@ void loop()
 						}
 						// terminate it correctly
 						strcat(send_buf, "]}\n");
-						// send
+						// sendu
+						PDEBUG("D 11")
 						sendToDisplay(send_buf);
 					}
 				}
@@ -826,8 +895,11 @@ void loop()
 			{
 				dieError(44);
 			}
+			PDEBUG("D 19")
 		}
+		PDEBUG("D 20")
 		reset_serial_buffer();
+		PDEBUG("D 21")
 	}
 	// some funny blinking as long as we dont have a handshake
 	if (!have_handshake)
@@ -860,6 +932,7 @@ void loop()
 		// check for pressed buttons anyway and store them
 		read_console_updates(&key_updates);
 	}
+	PDEBUG("D 22")
 }
 
 #endif
