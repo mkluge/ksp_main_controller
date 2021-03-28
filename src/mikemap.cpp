@@ -143,10 +143,10 @@ namespace mikemap
 
   int MikeMap::to_int(const char *data, int len)
   {
-    int val = 0;
+    long int val = 0;
     while (len)
     {
-      int new_val = ((int)*data - (int)'0');
+      long int new_val = ((int)*data - (int)'0');
       val = val * 10 + new_val;
       len--;
       data++;
