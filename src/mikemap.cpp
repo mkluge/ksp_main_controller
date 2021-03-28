@@ -137,11 +137,11 @@ namespace mikemap
       offset += sprintf(&ptr[offset], "%d", mikemap_keys[i]);
       ptr[offset] = ',';
       offset++;
-      offset += sprintf(&ptr[offset], "%d", mikemap_values[i]);
+      offset += sprintf(&ptr[offset], "%ld", mikemap_values[i]);
     }
   }
 
-  int MikeMap::to_int(const char *data, int len)
+  long int MikeMap::to_int(const char *data, int len)
   {
     long int val = 0;
     while (len)
@@ -152,7 +152,7 @@ namespace mikemap
       data++;
     }
 #ifdef TEST_MIKEMAP
-    printf("val: %d\n", val);
+    printf("val: %ld\n", val);
 #endif
     return val;
   }

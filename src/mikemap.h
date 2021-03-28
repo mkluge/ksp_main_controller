@@ -33,7 +33,7 @@ namespace mikemap
     void clear();
     void to_string(char *ptr);
     int from_string(const char *data_start, int *converted);
-    static int to_int(const char *data, int len);
+    static long int to_int(const char *data, int len);
 
   private:
     MAP_KEY_TYPE mikemap_keys[MAX_MAP_LEN];
