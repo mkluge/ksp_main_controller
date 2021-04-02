@@ -184,7 +184,7 @@ namespace mikemap
         if (*data_ptr == ']')
           return MM_ERR_MISSING_VAL;
       }
-      int k = this->to_int(key_start, len_key);
+      MAP_KEY_TYPE k = this->to_int(key_start, len_key);
       (*converted)++;
       data_ptr++;
       int len_val = 0;
@@ -200,7 +200,7 @@ namespace mikemap
         if (len_val == 0 || len_val == MAX_SINGLE_DATA_LEN)
           return MM_ERR_ZERO_MAX_LEN_VAL;
       }
-      int v = this->to_int(val_start, len_val);
+      MAP_VALUE_TYPE v = this->to_int(val_start, len_val);
       (*converted)++;
       this->set(k, v);
       if (*data_ptr == ']')
