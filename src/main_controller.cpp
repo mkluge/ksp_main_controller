@@ -586,10 +586,10 @@ int freeRam()
 		read_console_updates(&key_updates);
 		PDEBUG("P S")
 		if (data->has(INFO_SPEED))
-			print_led(led_top, (int)data->get(INFO_SPEED));
+			print_led(led_top, data->get(INFO_SPEED));
 		PDEBUG("P H")
 		if (data->has(INFO_HEIGHT))
-			print_led(led_bottom, (int)data->get(INFO_HEIGHT));
+			print_led(led_bottom, data->get(INFO_HEIGHT));
 		PDEBUG("P D")
 		read_console_updates(&key_updates);
 		PDEBUG("P E")
